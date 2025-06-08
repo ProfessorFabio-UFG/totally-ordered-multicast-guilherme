@@ -14,7 +14,11 @@ PEERS = []
 
 # Relógio de Lamport e fila de mensagens para entrega ordenada
 lamport_clock = LamportClock()
-message_queue = MessageQueue()
+message_queue = None  # Will be initialized after we know N
+
+# Message types
+MSG_DATA = "DATA"
+MSG_ACK = "ACK"
 
 # UDP sockets to send and receive data messages:
 # Create send socket
@@ -89,24 +93,21 @@ class MsgHandler(threading.Thread):
   def run(self):
     print('Handler is ready. Waiting for the handshakes...')
     
-    #global handShakes
     global handShakeCount
+    global message_queue
     
     # Wait until handshakes are received from all other processes
-    # (to make sure that all processes are synchronized before they start exchanging messages)
     while handShakeCount < N:
       msgPack = self.sock.recv(1024)
       msg = pickle.loads(msgPack)
-      #print ('########## unpickled msgPack: ', msg)
       if msg[0] == 'READY':
-
-        # To do: send reply of handshake and wait for confirmation
-
         handShakeCount = handShakeCount + 1
-        #handShakes[msg[1]] = 1
         print('--- Handshake received: ', msg[1])
 
     print('Secondary Thread: Received all handshakes. Entering the loop to receive messages.')
+
+    # Initialize message queue now that we know N
+    message_queue = MessageQueue(N)
 
     stopCount=0 
     while True:                
@@ -117,15 +118,26 @@ class MsgHandler(threading.Thread):
         if stopCount == N:
           break  # stop loop when all other processes have finished
       else:
-        # print('Message ' + str(msg[1]) + ' from process ' + str(msg[0]))
-        # logList.append(msg)
-        # Update Lamport clock with received timestamp
-        sender_id, msg_content, timestamp = msg
-        lamport_clock.update(timestamp)
-        
-        # Create Message object and add to queue
-        message = Message(sender_id, msg_content, timestamp)
-        message_queue.add_message(message)
+        msg_type = msg[0]
+        if msg_type == MSG_DATA:
+          # Handle data message
+          sender_id, msg_content, timestamp = msg[1:]
+          lamport_clock.update(timestamp)
+          
+          # Create Message object and add to queue
+          message = Message(sender_id, msg_content, timestamp)
+          message_queue.add_message(message)
+          
+          # Send acknowledgment to all peers
+          ack_msg = (MSG_ACK, sender_id, msg_content, timestamp, myself)
+          ack_pack = pickle.dumps(ack_msg)
+          for addrToSend in PEERS:
+            sendSocket.sendto(ack_pack, (addrToSend, PEER_UDP_PORT))
+            
+        elif msg_type == MSG_ACK:
+          # Handle acknowledgment
+          sender_id, msg_content, timestamp, from_process = msg[1:]
+          message_queue.add_acknowledgment(timestamp, sender_id, msg_content, from_process)
         
         # Process deliverable messages
         deliverable = message_queue.get_deliverable_messages()
@@ -216,7 +228,7 @@ while 1:
     timestamp = lamport_clock.increment()
     
     # Create message with Lamport timestamp
-    msg = (myself, msgNumber, timestamp)
+    msg = (MSG_DATA, myself, msgNumber, timestamp)
     msgPack = pickle.dumps(msg)
     
     for addrToSend in PEERS:
