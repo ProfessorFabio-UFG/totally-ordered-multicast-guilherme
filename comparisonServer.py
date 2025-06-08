@@ -82,13 +82,22 @@ def waitForLogsAndCompare(N_MSGS):
 		msgs.append(pickle.loads(msgPack))
 		numPeers = numPeers + 1
 
+	# Print the size of each log for debugging
+	for i, log in enumerate(msgs):
+		print(f"Process {i} log size: {len(log)}")
+
 	unordered = 0 # Contador de mensagens fora de ordem
 
 	# Comparando as listas de mensagens
 	# Com os timestamps de Lamport, as mensagens devem estar na mesma ordem em todos os processos
-	for j in range(0, N_MSGS-1):
+	total_msgs = len(msgs[0])  # Use the actual number of messages in the log
+	for j in range(total_msgs):
 		firstMsg = msgs[0][j]  # (sender_id, msg_content, timestamp)
-		for i in range(1, N-1):
+		for i in range(1, N):  # Changed from N-1 to N to include all processes
+			if j >= len(msgs[i]):  # Check if this process has enough messages
+				print(f"Process {i} has fewer messages than process 0")
+				unordered += 1
+				break
 			if firstMsg != msgs[i][j]:
 				print(f"Ordering mismatch at position {j}:")
 				print(f"Process 0 received: {firstMsg}")

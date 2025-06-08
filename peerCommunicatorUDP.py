@@ -128,11 +128,16 @@ class MsgHandler(threading.Thread):
           message = Message(sender_id, msg_content, timestamp)
           message_queue.add_message(message)
           
-          # Send acknowledgment to all peers
+          # Send acknowledgment to all peers (including ourselves)
           ack_msg = (MSG_ACK, sender_id, msg_content, timestamp, myself)
           ack_pack = pickle.dumps(ack_msg)
+          
+          # Send to all peers
           for addrToSend in PEERS:
             sendSocket.sendto(ack_pack, (addrToSend, PEER_UDP_PORT))
+          
+          # Also acknowledge to ourselves
+          message_queue.add_acknowledgment(timestamp, sender_id, msg_content, myself)
             
         elif msg_type == MSG_ACK:
           # Handle acknowledgment
@@ -227,13 +232,19 @@ while 1:
     # Increment Lamport clock before sending
     timestamp = lamport_clock.increment()
     
-    # Create message with Lamport timestamp
+    # Create message with Lamport timestamp and send to all peers
     msg = (MSG_DATA, myself, msgNumber, timestamp)
     msgPack = pickle.dumps(msg)
     
+    # Send to all peers
     for addrToSend in PEERS:
       sendSocket.sendto(msgPack, (addrToSend,PEER_UDP_PORT))
       print(f'Sent message {msgNumber} with timestamp {timestamp}')
+    
+    # Also deliver to ourselves
+    message = Message(myself, msgNumber, timestamp)
+    message_queue.add_message(message)
+    message_queue.add_acknowledgment(timestamp, myself, msgNumber, myself)
 
   # Tell all processes that I have no more messages to send
   for addrToSend in PEERS:
