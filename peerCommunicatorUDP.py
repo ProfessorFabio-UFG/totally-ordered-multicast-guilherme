@@ -43,9 +43,12 @@ def registerWithGroupManager():
   O grupo de gerenciamento é responsável por manter o registro de todos os processos
   e fornecer informações sobre os outros processos.
   """
+  # Conectando ao grupo de gerenciamento
   clientSock = socket(AF_INET, SOCK_STREAM)
   print ('Connecting to group manager: ', (GROUPMNGR_ADDR,GROUPMNGR_TCP_PORT))
   clientSock.connect((GROUPMNGR_ADDR,GROUPMNGR_TCP_PORT))
+
+  # Se registrando com o grupo de gerenciamento
   ipAddr = get_public_ip()
   req = {"op":"register", "ipaddr":ipAddr, "port":PEER_UDP_PORT}
   msg = pickle.dumps(req)
@@ -73,6 +76,11 @@ def getListOfPeers():
   return PEERS
 
 class MsgHandler(threading.Thread):
+  """
+  Thread para receber as mensagens dos outros processos.
+  Responsável por receber as mensagens dos outros processos e armazená-las em uma lista.
+  E também por enviar as mensagens para o servidor de comparação.
+  """
   def __init__(self, sock):
     threading.Thread.__init__(self)
     self.sock = sock
@@ -143,8 +151,10 @@ class MsgHandler(threading.Thread):
 
     exit(0)
 
-# Function to wait for start signal from comparison server:
 def waitToStart():
+  """
+  Aguarda o sinal de início do servidor de comparação que envia a quantidade de mensagens a ser trocadas.
+  """
   (conn, addr) = serverSock.accept()
   msgPack = conn.recv(1024)
   msg = pickle.loads(msgPack)
@@ -155,11 +165,16 @@ def waitToStart():
   return (myself,nMsgs)
 
 # From here, code is executed when program starts:
+
+# Registrando este processo com o grupo de gerenciamento
 registerWithGroupManager()
+
 while 1:
   print('Waiting for signal to start...')
-  (myself, nMsgs) = waitToStart()
+  (myself, nMsgs) = waitToStart() # Aguarda o sinal de início do servidor de comparação
+  
   print('I am up, and my ID is: ', str(myself))
+  print('I will send ', str(nMsgs), ' messages.')
 
   if nMsgs == 0:
     print('Terminating.')

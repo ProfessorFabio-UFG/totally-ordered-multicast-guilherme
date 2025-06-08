@@ -13,6 +13,9 @@ def serverLoop():
   serverSock = socket(AF_INET, SOCK_STREAM) # Cria um socket para o servidor
   serverSock.bind(('0.0.0.0', port)) # Associa o socket ao endereço e porta
   serverSock.listen(6) # Aguarda até 6 conexões
+
+  print('Group manager started on port, waiting for peer connections...', port)
+
   while(1):
     # Aguarda a conexão de um processo
     (conn, addr) = serverSock.accept()
