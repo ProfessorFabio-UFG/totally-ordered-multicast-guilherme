@@ -1,17 +1,20 @@
-from socket  import *
-from constMP import * #-
+from socket import *
+from constMP import *
 import threading
 import random
 import time
 import pickle
 from requests import get
-
-#handShakes = [] # not used; only if we need to check whose handshake is missing
+from lamport_clock import LamportClock, Message, MessageQueue
 
 # Counter to make sure we have received handshakes from all other processes
 handShakeCount = 0
 
 PEERS = []
+
+# Relógio de Lamport e fila de mensagens para entrega ordenada
+lamport_clock = LamportClock()
+message_queue = MessageQueue()
 
 # UDP sockets to send and receive data messages:
 # Create send socket
@@ -27,12 +30,19 @@ serverSock.listen(1)
 
 
 def get_public_ip():
+  """
+  Obtém o endereço IP público do processo.
+  """
   ipAddr = get('https://api.ipify.org').content.decode('utf8')
   print('My public IP address is: {}'.format(ipAddr))
   return ipAddr
 
-# Function to register this peer with the group manager
 def registerWithGroupManager():
+  """
+  Registra este processo com o grupo de gerenciamento.
+  O grupo de gerenciamento é responsável por manter o registro de todos os processos
+  e fornecer informações sobre os outros processos.
+  """
   clientSock = socket(AF_INET, SOCK_STREAM)
   print ('Connecting to group manager: ', (GROUPMNGR_ADDR,GROUPMNGR_TCP_PORT))
   clientSock.connect((GROUPMNGR_ADDR,GROUPMNGR_TCP_PORT))
@@ -44,6 +54,11 @@ def registerWithGroupManager():
   clientSock.close()
 
 def getListOfPeers():
+  """
+  Obtém a lista de processos participantes.
+  O grupo de gerenciamento é responsável por manter o registro de todos os processos
+  e fornecer informações sobre os outros processos.
+  """
   clientSock = socket(AF_INET, SOCK_STREAM)
   print ('Connecting to group manager: ', (GROUPMNGR_ADDR,GROUPMNGR_TCP_PORT))
   clientSock.connect((GROUPMNGR_ADDR,GROUPMNGR_TCP_PORT))
@@ -61,14 +76,13 @@ class MsgHandler(threading.Thread):
   def __init__(self, sock):
     threading.Thread.__init__(self)
     self.sock = sock
+    self.logList = []
 
   def run(self):
     print('Handler is ready. Waiting for the handshakes...')
     
     #global handShakes
     global handShakeCount
-    
-    logList = []
     
     # Wait until handshakes are received from all other processes
     # (to make sure that all processes are synchronized before they start exchanging messages)
@@ -95,19 +109,32 @@ class MsgHandler(threading.Thread):
         if stopCount == N:
           break  # stop loop when all other processes have finished
       else:
-        print('Message ' + str(msg[1]) + ' from process ' + str(msg[0]))
-        logList.append(msg)
+        # print('Message ' + str(msg[1]) + ' from process ' + str(msg[0]))
+        # logList.append(msg)
+        # Update Lamport clock with received timestamp
+        sender_id, msg_content, timestamp = msg
+        lamport_clock.update(timestamp)
         
-    # Write log file
+        # Create Message object and add to queue
+        message = Message(sender_id, msg_content, timestamp)
+        message_queue.add_message(message)
+        
+        # Process deliverable messages
+        deliverable = message_queue.get_deliverable_messages()
+        for msg in deliverable:
+          print(f'Delivered message {msg.msg_content} from process {msg.sender_id} with timestamp {msg.timestamp}')
+          self.logList.append((msg.sender_id, msg.msg_content, msg.timestamp))
+        
+    # Write log file with ordered messages
     logFile = open('logfile'+str(myself)+'.log', 'w')
-    logFile.writelines(str(logList))
+    logFile.writelines(str(self.logList))
     logFile.close()
     
-    # Send the list of messages to the server (using a TCP socket) for comparison
+    # Send the list of messages to the server for comparison
     print('Sending the list of messages to the server for comparison...')
     clientSock = socket(AF_INET, SOCK_STREAM)
     clientSock.connect((SERVER_ADDR, SERVER_PORT))
-    msgPack = pickle.dumps(logList)
+    msgPack = pickle.dumps(self.logList)
     clientSock.send(msgPack)
     clientSock.close()
     
@@ -169,11 +196,17 @@ while 1:
   for msgNumber in range(0, nMsgs):
     # Wait some random time between successive messages
     time.sleep(random.randrange(10,100)/1000)
-    msg = (myself, msgNumber)
+    
+    # Increment Lamport clock before sending
+    timestamp = lamport_clock.increment()
+    
+    # Create message with Lamport timestamp
+    msg = (myself, msgNumber, timestamp)
     msgPack = pickle.dumps(msg)
+    
     for addrToSend in PEERS:
       sendSocket.sendto(msgPack, (addrToSend,PEER_UDP_PORT))
-      print('Sent message ' + str(msgNumber))
+      print(f'Sent message {msgNumber} with timestamp {timestamp}')
 
   # Tell all processes that I have no more messages to send
   for addrToSend in PEERS:
