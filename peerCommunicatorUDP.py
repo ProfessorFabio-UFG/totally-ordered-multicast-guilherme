@@ -121,7 +121,10 @@ class MsgHandler(threading.Thread):
         msg_type = msg[0]
         if msg_type == MSG_DATA:
           # Handle data message
-          sender_id, msg_content, timestamp = msg[1:]
+          # Format: (MSG_DATA, sender_id, msg_content, timestamp)
+          _, sender_id, msg_content, timestamp = msg
+          print(f'Received data message {msg_content} from {sender_id} with timestamp {timestamp}')
+          
           lamport_clock.update(timestamp)
           
           # Create Message object and add to queue
@@ -141,7 +144,9 @@ class MsgHandler(threading.Thread):
             
         elif msg_type == MSG_ACK:
           # Handle acknowledgment
-          sender_id, msg_content, timestamp, from_process = msg[1:]
+          # Format: (MSG_ACK, sender_id, msg_content, timestamp, from_process)
+          _, sender_id, msg_content, timestamp, from_process = msg
+          print(f'Received ACK from {from_process} for message {msg_content} from {sender_id}')
           message_queue.add_acknowledgment(timestamp, sender_id, msg_content, from_process)
         
         # Process deliverable messages
@@ -157,6 +162,8 @@ class MsgHandler(threading.Thread):
     
     # Send the list of messages to the server for comparison
     print('Sending the list of messages to the server for comparison...')
+    print(f'Log size: {len(self.logList)}')
+    print(f'Log contents: {self.logList}')
     clientSock = socket(AF_INET, SOCK_STREAM)
     clientSock.connect((SERVER_ADDR, SERVER_PORT))
     msgPack = pickle.dumps(self.logList)

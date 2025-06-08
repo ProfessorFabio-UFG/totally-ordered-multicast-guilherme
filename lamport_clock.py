@@ -84,7 +84,7 @@ class MessageQueue:
         Obtém todas as mensagens que estão prontas para serem entregues.
         Uma mensagem é entregável apenas se:
         1. Está na cabeça da fila (menor timestamp)
-        2. Foi reconhecida por todos os processos
+        2. Foi reconhecida por todos os processos (incluindo o próprio processo)
         """
         deliverable = []
         while self.queue:
@@ -92,7 +92,8 @@ class MessageQueue:
             msg_id = (message.timestamp, message.sender_id, message.msg_content)
             
             # Verifica se a mensagem foi reconhecida por todos os processos
-            if msg_id in self.acknowledgments and len(self.acknowledgments[msg_id]) >= self.num_processes - 1:
+            # Precisamos de num_processes acknowledgments (incluindo o próprio processo)
+            if msg_id in self.acknowledgments and len(self.acknowledgments[msg_id]) >= self.num_processes:
                 # Remove a mensagem da fila e marca como entregue
                 heapq.heappop(self.queue)
                 self.delivered.add(msg_id)
