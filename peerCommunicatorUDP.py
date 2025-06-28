@@ -10,7 +10,7 @@ from lamport_clock import LamportClock, Message, MessageQueue
 # Counter to make sure we have received handshakes from all other processes
 handShakeCount = 0
 
-PEERS = []
+PEERS = {}
 
 # Relógio de Lamport e fila de mensagens para entrega ordenada
 lamport_clock = LamportClock()
@@ -74,10 +74,17 @@ def getListOfPeers():
   print ('Getting list of peers from group manager: ', req)
   clientSock.send(msg)
   msg = clientSock.recv(2048)
-  PEERS = pickle.loads(msg)
-  print ('Got list of peers: ', PEERS)
+  peer_addresses = pickle.loads(msg)
+  print ('Got list of peers: ', peer_addresses)
   clientSock.close()
-  return PEERS
+  
+  # Create a mapping between peer IDs and their addresses
+  # The ID is determined by the order in the list
+  peer_map = {}
+  for idx, addr in enumerate(peer_addresses):
+    peer_map[idx] = addr
+  
+  return peer_map
 
 class MsgHandler(threading.Thread):
   """
@@ -110,7 +117,10 @@ class MsgHandler(threading.Thread):
         # Send confirmation back
         confirm_msg = ('READY_CONFIRM', myself)
         confirm_pack = pickle.dumps(confirm_msg)
-        sendSocket.sendto(confirm_pack, (PEERS[peer_id], PEER_UDP_PORT))
+        if peer_id in PEERS:  # Verify if we have the peer's address
+          sendSocket.sendto(confirm_pack, (PEERS[peer_id], PEER_UDP_PORT))
+        else:
+          print(f'Warning: Peer {peer_id} not found in peer map')
         
         if handShakeCount == N:
           self.all_handshakes_received.set()
@@ -152,8 +162,8 @@ class MsgHandler(threading.Thread):
           ack_pack = pickle.dumps(ack_msg)
           
           # Send to all peers
-          for addrToSend in PEERS:
-            sendSocket.sendto(ack_pack, (addrToSend, PEER_UDP_PORT))
+          for peer_id, addr in PEERS.items():
+            sendSocket.sendto(ack_pack, (addr, PEER_UDP_PORT))
           
           # Also acknowledge to ourselves
           message_queue.add_acknowledgment(timestamp, sender_id, msg_content, myself)
@@ -210,7 +220,7 @@ def waitForHandshakes():
   Só retorna quando todos os handshakes forem confirmados e recebidos.
   """
   # Send handshakes to all peers
-  for peer_id, addr in enumerate(PEERS):
+  for peer_id, addr in PEERS.items():
     if peer_id != myself:  # Don't send to ourselves
       print('Sending handshake to peer', peer_id)
       msg = ('READY', myself)
@@ -269,8 +279,8 @@ while 1:
     msgPack = pickle.dumps(msg)
     
     # Send to all peers
-    for addrToSend in PEERS:
-      sendSocket.sendto(msgPack, (addrToSend,PEER_UDP_PORT))
+    for peer_id, addr in PEERS.items():
+      sendSocket.sendto(msgPack, (addr, PEER_UDP_PORT))
       print(f'Sent message {msgNumber} with timestamp {timestamp}')
     
     # Also deliver to ourselves
@@ -279,7 +289,7 @@ while 1:
     message_queue.add_acknowledgment(timestamp, myself, msgNumber, myself)
 
   # Tell all processes that I have no more messages to send
-  for addrToSend in PEERS:
+  for peer_id, addr in PEERS.items():
     msg = (-1,-1)
     msgPack = pickle.dumps(msg)
-    sendSocket.sendto(msgPack, (addrToSend,PEER_UDP_PORT))
+    sendSocket.sendto(msgPack, (addr, PEER_UDP_PORT))
