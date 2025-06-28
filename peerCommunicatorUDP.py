@@ -99,6 +99,7 @@ class MsgHandler(threading.Thread):
     self.handshake_confirmations = set()  # Set to track which peers have confirmed our handshake
     self.all_handshakes_received = threading.Event()  # Event to signal when all handshakes are received
     self.received_handshakes = set()  # Set to track unique handshakes
+    self.round_complete = threading.Event()  # Event to signal when the round is complete
 
   def run(self):
     print('Handler is ready. Waiting for the handshakes...')
@@ -203,8 +204,10 @@ class MsgHandler(threading.Thread):
     
     # Reset the handshake counter
     handShakeCount = 0
-
-    exit(0)
+    
+    # Signal that this round is complete
+    self.round_complete.set()
+    print('Round complete, waiting for next round...')
 
 def waitToStart():
   """
@@ -316,3 +319,7 @@ while 1:
     msg = (-1,-1)
     msgPack = pickle.dumps(msg)
     sendSocket.sendto(msgPack, (addr, PEER_UDP_PORT))
+    
+  # Wait for this round to complete before accepting new start signals
+  msgHandler.round_complete.wait()
+  msgHandler.round_complete.clear()  # Reset for next round
