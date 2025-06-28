@@ -98,6 +98,7 @@ class MsgHandler(threading.Thread):
     self.logList = []
     self.handshake_confirmations = set()  # Set to track which peers have confirmed our handshake
     self.all_handshakes_received = threading.Event()  # Event to signal when all handshakes are received
+    self.received_handshakes = set()  # Set to track unique handshakes
 
   def run(self):
     print('Handler is ready. Waiting for the handshakes...')
@@ -111,24 +112,28 @@ class MsgHandler(threading.Thread):
       msg = pickle.loads(msgPack)
       if msg[0] == 'READY':
         peer_id = msg[1]
-        handShakeCount = handShakeCount + 1
-        print('--- Handshake received from peer:', peer_id)
-        
-        # Send confirmation back
-        confirm_msg = ('READY_CONFIRM', myself)
-        confirm_pack = pickle.dumps(confirm_msg)
-        if peer_id in PEERS:  # Verify if we have the peer's address
-          sendSocket.sendto(confirm_pack, (PEERS[peer_id], PEER_UDP_PORT))
-        else:
-          print(f'Warning: Peer {peer_id} not found in peer map')
-        
-        if handShakeCount == N:
-          self.all_handshakes_received.set()
+        if peer_id not in self.received_handshakes:  # Only process if not received before
+          self.received_handshakes.add(peer_id)
+          handShakeCount = handShakeCount + 1
+          print('--- Handshake received from peer:', peer_id)
           
+          # Send confirmation back
+          confirm_msg = ('READY_CONFIRM', myself)
+          confirm_pack = pickle.dumps(confirm_msg)
+          if peer_id in PEERS:
+            sendSocket.sendto(confirm_pack, (PEERS[peer_id], PEER_UDP_PORT))
+            print(f'--- Sent confirmation to peer {peer_id}')
+          else:
+            print(f'Warning: Peer {peer_id} not found in peer map')
+          
+          if handShakeCount == N:
+            self.all_handshakes_received.set()
+            
       elif msg[0] == 'READY_CONFIRM':
         confirming_peer = msg[1]
-        self.handshake_confirmations.add(confirming_peer)
-        print('--- Handshake confirmation received from peer:', confirming_peer)
+        if confirming_peer not in self.handshake_confirmations:
+          self.handshake_confirmations.add(confirming_peer)
+          print('--- Handshake confirmation received from peer:', confirming_peer)
 
     print('Secondary Thread: Received all handshakes. Entering the loop to receive messages.')
 
@@ -225,17 +230,34 @@ def waitForHandshakes():
       print('Sending handshake to peer', peer_id)
       msg = ('READY', myself)
       msgPack = pickle.dumps(msg)
-      sendSocket.sendto(msgPack, (addr, PEER_UDP_PORT))
+      # Send each handshake 3 times to increase reliability
+      for _ in range(3):
+        sendSocket.sendto(msgPack, (addr, PEER_UDP_PORT))
+        time.sleep(0.1)  # Small delay between retries
 
-  # Wait until we get confirmations from all peers
+  print('Main Thread: Sent all handshakes, waiting for confirmations...')
+
+  # Wait until we get confirmations from all peers with timeout
+  timeout = 30  # 30 seconds timeout
+  start_time = time.time()
+  
   while len(msgHandler.handshake_confirmations) < N - 1:  # N-1 because we don't need confirmation from ourselves
+    if time.time() - start_time > timeout:
+      print('Warning: Timeout waiting for handshake confirmations')
+      print(f'Received confirmations from: {msgHandler.handshake_confirmations}')
+      print(f'Missing confirmations from peers: {set(range(N)) - {myself} - msgHandler.handshake_confirmations}')
+      break
     time.sleep(0.1)  # Small sleep to prevent busy waiting
     
-  print('Main Thread: All handshakes confirmed.')
+  print('Main Thread: All handshakes confirmed or timeout reached.')
   
-  # Wait for all handshakes to be received
-  msgHandler.all_handshakes_received.wait()
-  print('Main Thread: All handshakes received. Ready to start sending messages.')
+  # Wait for all handshakes to be received with timeout
+  if not msgHandler.all_handshakes_received.wait(timeout):
+    print('Warning: Timeout waiting for all handshakes to be received')
+    print(f'Received handshakes from: {msgHandler.received_handshakes}')
+    print(f'Missing handshakes from peers: {set(range(N)) - msgHandler.received_handshakes}')
+  
+  print('Main Thread: Ready to start sending messages.')
 
 # From here, code is executed when program starts:
 
@@ -253,12 +275,13 @@ while 1:
     print('Terminating.')
     exit(0)
 
+  # Get the list of peers BEFORE starting the handler
+  PEERS = getListOfPeers()
+
   # Create receiving message handler
   msgHandler = MsgHandler(recvSocket)
   msgHandler.start()
   print('Handler started')
-
-  PEERS = getListOfPeers()
   
   # Wait for all processes to be ready using the handshake mechanism
   waitForHandshakes()
