@@ -89,6 +89,8 @@ class MsgHandler(threading.Thread):
     threading.Thread.__init__(self)
     self.sock = sock
     self.logList = []
+    self.handshake_confirmations = set()  # Set to track which peers have confirmed our handshake
+    self.all_handshakes_received = threading.Event()  # Event to signal when all handshakes are received
 
   def run(self):
     print('Handler is ready. Waiting for the handshakes...')
@@ -101,8 +103,22 @@ class MsgHandler(threading.Thread):
       msgPack = self.sock.recv(1024)
       msg = pickle.loads(msgPack)
       if msg[0] == 'READY':
+        peer_id = msg[1]
         handShakeCount = handShakeCount + 1
-        print('--- Handshake received: ', msg[1])
+        print('--- Handshake received from peer:', peer_id)
+        
+        # Send confirmation back
+        confirm_msg = ('READY_CONFIRM', myself)
+        confirm_pack = pickle.dumps(confirm_msg)
+        sendSocket.sendto(confirm_pack, (PEERS[peer_id], PEER_UDP_PORT))
+        
+        if handShakeCount == N:
+          self.all_handshakes_received.set()
+          
+      elif msg[0] == 'READY_CONFIRM':
+        confirming_peer = msg[1]
+        self.handshake_confirmations.add(confirming_peer)
+        print('--- Handshake confirmation received from peer:', confirming_peer)
 
     print('Secondary Thread: Received all handshakes. Entering the loop to receive messages.')
 
@@ -188,6 +204,29 @@ def waitToStart():
   conn.close()
   return (myself,nMsgs)
 
+def waitForHandshakes():
+  """
+  Envia handshakes para todos os peers e aguarda confirmação de todos eles.
+  Só retorna quando todos os handshakes forem confirmados e recebidos.
+  """
+  # Send handshakes to all peers
+  for peer_id, addr in enumerate(PEERS):
+    if peer_id != myself:  # Don't send to ourselves
+      print('Sending handshake to peer', peer_id)
+      msg = ('READY', myself)
+      msgPack = pickle.dumps(msg)
+      sendSocket.sendto(msgPack, (addr, PEER_UDP_PORT))
+
+  # Wait until we get confirmations from all peers
+  while len(msgHandler.handshake_confirmations) < N - 1:  # N-1 because we don't need confirmation from ourselves
+    time.sleep(0.1)  # Small sleep to prevent busy waiting
+    
+  print('Main Thread: All handshakes confirmed.')
+  
+  # Wait for all handshakes to be received
+  msgHandler.all_handshakes_received.wait()
+  print('Main Thread: All handshakes received. Ready to start sending messages.')
+
 # From here, code is executed when program starts:
 
 # Registrando este processo com o grupo de gerenciamento
@@ -204,11 +243,6 @@ while 1:
     print('Terminating.')
     exit(0)
 
-  # Wait for other processes to be ready
-  # To Do: fix bug that causes a failure when not all processes are started within this time
-  # (fully started processes start sending data messages, which the others try to interpret as control messages) 
-  time.sleep(5)
-
   # Create receiving message handler
   msgHandler = MsgHandler(recvSocket)
   msgHandler.start()
@@ -216,22 +250,13 @@ while 1:
 
   PEERS = getListOfPeers()
   
-  # Send handshakes
-  # To do: Must continue sending until it gets a reply from each process
-  #        Send confirmation of reply
-  for addrToSend in PEERS:
-    print('Sending handshake to ', addrToSend)
-    msg = ('READY', myself)
-    msgPack = pickle.dumps(msg)
-    sendSocket.sendto(msgPack, (addrToSend,PEER_UDP_PORT))
-    #data = recvSocket.recvfrom(128) # Handshadke confirmations have not yet been implemented
+  # Wait for all processes to be ready using the handshake mechanism
+  waitForHandshakes()
 
-  print('Main Thread: Sent all handshakes. handShakeCount=', str(handShakeCount))
+  # Initialize message queue now that we know N
+  message_queue = MessageQueue(N)
 
-  while (handShakeCount < N):
-    pass  # find a better way to wait for the handshakes
-
-  # Send a sequence of data messages to all other processes 
+  # Send a sequence of data messages to all other processes
   for msgNumber in range(0, nMsgs):
     # Wait some random time between successive messages
     time.sleep(random.randrange(10,100)/1000)
