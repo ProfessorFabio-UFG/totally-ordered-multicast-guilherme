@@ -245,7 +245,7 @@ if __name__ == '__main__':
 		#	Wait for other processes to be ready
 		#	TODO: fix bug that causes a failure when not all processes are started within this time
 		#	(fully started processes start sending data messages, which the others try to interpret as control messages)
-		#	time.sleep(5)
+		time.sleep(10)
 
 		# Criando o handler de recebimento de handshakes e mensagens,
 		# que é iniciado em uma thread separada para não bloquear a execução do programa
