@@ -9,6 +9,9 @@ def server_loop():
     server_sock = socket(AF_INET, SOCK_STREAM)
     server_sock.bind(('0.0.0.0', port))
     server_sock.listen(N) # N é o máximo de conexões simultâneas permitidas
+
+    print(f"Group manager started on port {port}")
+
     while True:
         # Aguarda a conexão de um processo
         (conn, addr) = server_sock.accept()
