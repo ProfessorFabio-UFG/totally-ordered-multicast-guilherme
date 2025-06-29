@@ -85,8 +85,11 @@ def wait_for_logs_and_compare(N_MSGS):
 
 	unordered = False
 
+	print(f"Messages: {messages}")
+
 	# Verificando se as mensagens estão ordenadas
 	for j in range(0, N_MSGS-1):
+		print(f"Checking message {j}")
 		first_message = messages[0][j]
 		for i in range(1, N-1):
 			if first_message != messages[i][j]:
