@@ -48,7 +48,6 @@ def prompt_user():
 	return number_of_messages
 
 def start_peers(peerList, number_of_messages):
-	# Connect to each of the peers and send the 'initiate' signal:
 	peer_number = 0
 	
 	# Iniciando cada peer
@@ -61,7 +60,7 @@ def start_peers(peerList, number_of_messages):
 		msgPack = pickle.dumps(msg)
 		client_sock.send(msgPack)
 
-		# TODO: ENTENDER O QUE ESTÁ SENDO RECEBIDO AQUI
+		# Recebendo uma confirmação de que o peer iniciou
 		msgPack = client_sock.recv(512)
 		print(pickle.loads(msgPack))
 		client_sock.close()

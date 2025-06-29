@@ -140,13 +140,17 @@ def wait_to_start():
     Aguarda o sinal de início do servidor de comparação.
     Retorna o ID deste peer e o número de mensagens que ele deve enviar.
     """
+    # Recebendo o sinal de início do servidor de comparação
     (conn, addr) = serverSock.accept()
     msgPack = conn.recv(1024)
     msg = pickle.loads(msgPack)
     myself = msg[0]
     number_of_messages = msg[1]
+
+    # Enviando uma confirmação de que o peer iniciou
     conn.send(pickle.dumps('Peer process ' + str(myself) + ' started.'))
     conn.close()
+    
     return (myself, number_of_messages)
 
 
