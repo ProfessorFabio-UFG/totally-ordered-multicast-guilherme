@@ -110,6 +110,7 @@ class MessageHandler(threading.Thread):
 				print('--- Handshake received: ', msg[1])
 
 				# Enviando confirmação de handshake
+				print("Sending handshake confirmation to ", sender_address)
 				ack_message = ('HANDSHAKE_ACK', myself)
 				ack_message_pack = pickle.dumps(ack_message)
 				self.sock.sendto(ack_message_pack, sender_address)
@@ -269,7 +270,7 @@ if __name__ == '__main__':
             # TODO: Verificar a necessidade de reenviar o handshake caso a confirmação demore demais
 			try:
 				print("Waiting for handshake confirmation from ", adress_to_send)
-				send_socket.settimeout(10.0)
+				# send_socket.settimeout(10.0)
 						
 				while True:
                     # Fica aguardando por 2 segundos para receber a confirmação de handshake
