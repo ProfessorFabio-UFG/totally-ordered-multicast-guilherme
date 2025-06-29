@@ -110,7 +110,7 @@ class MessageHandler(threading.Thread):
 				print('--- Handshake received: ', msg[1])
 
 				# Enviando confirmação de handshake
-				print(f"Sending handshake confirmation to {sender_address} with socket {self.sock}")
+				print(f"Sending handshake confirmation to {sender_address} with socket {PEER_UDP_PORT}")
 				ack_message = ('HANDSHAKE_ACK', myself)
 				ack_message_pack = pickle.dumps(ack_message)
 				self.sock.sendto(ack_message_pack, (sender_address[0], PEER_UDP_PORT))
@@ -277,6 +277,8 @@ if __name__ == '__main__':
                     # de forma interminente
 					response_pack, _ = receive_socket.recvfrom(1024)
 					response = pickle.loads(response_pack)
+
+					print(f"On waiting for handshake confirmation from {adress_to_send}: Received response {response}")
 
 					if response[0] == 'HANDSHAKE_ACK' and response[1] == adress_to_send:
 						print('Handshake confirmed from ', response[1])
