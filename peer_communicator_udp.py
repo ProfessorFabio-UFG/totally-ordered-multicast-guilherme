@@ -204,7 +204,7 @@ class MessageHandler(threading.Thread):
 									self.send_sock.sendto(message_pack, (peer, PEER_UDP_PORT))
 								print(f'Sent final message {message} with timestamp {lamport_clock} to {peer}')
 								end_of_messages = True
-								continue
+								break
 							
 							# Se a mensagem é para o próprio peer, ele deve responder
 							# para todos os peers nomeando o peer que deve responder em seguida
