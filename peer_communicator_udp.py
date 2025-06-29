@@ -4,6 +4,7 @@ import threading
 import random
 import time
 import pickle
+import heapq
 from requests import get
 
 # handShakes = [] # not used; only if we need to check whose handshake is missing
@@ -11,7 +12,19 @@ from requests import get
 # Counter to make sure we have received handshakes from all other processes
 handshake_count = 0
 
+# Evento para indicar que todos os handshakes foram recebidos
 handshake_complete_event = threading.Event()
+
+# Relógio de Lamport
+lamport_clock = 0
+
+# Fila de mensagens recebidas antes de serem entregues
+message_queue = []
+
+# Dicionário para armazenar as confirmações de mensagem recebidas de cada peer
+# Chave: (timestamp, sender_id), quem mandou a mensagem e quando ela foi enviada
+# Valor: Conjunto de peers que receberam a mensagem
+acks_received = {}
 
 # Armazena a lista de peers
 PEERS = []
@@ -121,10 +134,56 @@ class MessageHandler(threading.Thread):
 				stop_count = stop_count + 1
 				if stop_count == N:
 					break  # parando quando todos os peers sinalizarem encerramento
+			elif isinstance(msg, tuple) and msg[0] == "ACK": # recebendo confirmação de recebimento de mensagem
+				_, ack_sender, ack_timestamp, ack_message_sender_id = msg
+				key = (ack_timestamp, ack_message_sender_id)
+
+				# Registrando a confirmação de recebimento da mensagem pelo peer que enviou o ack
+				if key not in acks_received:
+					acks_received[key] = set()
+				acks_received[key].add(ack_sender)
+
+				# Tentando entregar as mensagens da fila
+				while message_queue:
+					(top_key, top_message) = message_queue[0]
+					if len(acks_received.get(top_key, set())) == len(PEERS): # se todos os peers receberam a mensagem do topo da fila
+						# Entregando a mensagem
+						heapq.heappop(message_queue)
+						log_list.append(top_message)
+						print(f"Delivered message {top_message[1]} from process {top_message[0]} with timestamp {top_message[2]}")
+					else:
+						break # a próxima mensagem não tem todos os acks ainda
 			else:
-				# Guardando a mensagem recebida
-				print('Message ' + str(msg[1]) + ' from process ' + str(msg[0]))
-				log_list.append(msg)
+				if isinstance(msg, tuple) and len(msg) == 3: # garantindo que é uma mensagem normal e não de controle
+					sender_id, message_number, received_timestamp = msg
+
+					# Incrementando o relógio de Lamport com base na mensagem recebida
+					global lamport_clock
+					lamport_clock = max(lamport_clock, received_timestamp) + 1
+
+					# Enfileirando a mensagem recebida
+					heapq.heappush(message_queue, ((received_timestamp, sender_id), msg))
+
+					# Inicializando o controle de acks para esta mensagem recebida
+					acks_received[(received_timestamp, sender_id)] = set()
+
+					# Enviando confirmação de recebimento da mensagem para todos os peers
+					ack = ("ACK", myself, received_timestamp, sender_id)
+					ack_pack = pickle.dumps(ack)
+					for peer in PEERS:
+							self.sock.sendto(ack_pack, (peer, PEER_UDP_PORT))
+
+					# Já que recebemos uma nova mensagem, verificamos se há mensagens na fila para serem entregues
+					# Tentando entregar as mensagens da fila
+					while message_queue:
+						(top_key, top_message) = message_queue[0]
+						if len(acks_received.get(top_key, set())) == len(PEERS): # se todos os peers receberam a mensagem do topo da fila
+							# Entregando a mensagem
+							heapq.heappop(message_queue)
+							log_list.append(top_message)
+							print(f"Delivered message {top_message[1]} from process {top_message[0]} with timestamp {top_message[2]}")
+						else:
+							break # a próxima mensagem não tem todos os acks ainda
 
 		# Salvando a lista de mensagens recebidas por este peer em um arquivo de log
 		logfile = open('logfile' + str(myself) + '.log', 'w')
@@ -238,16 +297,19 @@ if __name__ == '__main__':
 		for message_number in range(0, number_of_messages):
 			# Esperando um tempo aleatório entre a mensagem anterior e a próxima
 			time.sleep(random.randrange(10, 100) / 1000)
+
+			# Incrementando o relógio de Lamport
+			lamport_clock += 1
 					
 			# Enviando a mensagem para todos os peers
-			msg = (myself, message_number)
+			msg = (myself, message_number, lamport_clock)
 			message_pack = pickle.dumps(msg)
 			for adress_to_send in PEERS:
 				send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
-				print('Sent message ' + str(message_number))
+				print(f'Sent message {message_number} with timestamp {lamport_clock}')
 
 		# Sinalizando para todos os peers que ele não tem mais mensagens para enviar
 		for adress_to_send in PEERS:
-			msg = (-1, -1)
+			msg = (-1, -1, lamport_clock)
 			message_pack = pickle.dumps(msg)
 			send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
