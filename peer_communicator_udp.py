@@ -135,16 +135,21 @@ class MessageHandler(threading.Thread):
 		# todos eles mandem uma mensagem de parada (-1, -1)
 		stop_count = 0
 		end_of_messages = False
+		
+		global lamport_clock
+
 		while True:
-			global lamport_clock
-			message_pack = self.sock.recv(1024)  # receive data from client
-			msg = pickle.loads(message_pack)
-			
 			if end_of_messages:
 				break # este peer identificou que não tem mais mensagens para enviar
+
+			message_pack = self.sock.recv(1024)  # receive data from client
+			msg = pickle.loads(message_pack)
+
+			print(f"Received message {msg} with timestamp {lamport_clock}, thinking what to do...")
+			
 			# Se for uma mensagem de parada, isto é, o peer não tem mais mensagens para enviar,
 			# incrementa o contador de paradas até N
-			elif msg[0] == -1:
+			if msg[0] == -1:
 				stop_count = stop_count + 1
 				if stop_count == N-1:
 					break  # parando quando todos os peers sinalizarem encerramento
