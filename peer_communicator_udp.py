@@ -139,7 +139,7 @@ class MessageHandler(threading.Thread):
 			# incrementa o contador de paradas até N
 			if msg[0] == -1:
 				stop_count = stop_count + 1
-				if stop_count == N:
+				if stop_count == N-1:
 					break  # parando quando todos os peers sinalizarem encerramento
 			elif isinstance(msg, tuple) and msg[0] == "ACK": # recebendo confirmação de recebimento de mensagem
 				_, ack_sender, ack_timestamp, ack_message_sender_id = msg
@@ -153,7 +153,7 @@ class MessageHandler(threading.Thread):
 				# Tentando entregar as mensagens da fila
 				while message_queue:
 					(top_key, top_message) = message_queue[0]
-					if len(acks_received.get(top_key, set())) == len(PEERS): # se todos os peers receberam a mensagem do topo da fila
+					if len(acks_received.get(top_key, set())) == len(PEERS)-1: # se todos os peers receberam a mensagem do topo da fila
 						# Entregando a mensagem
 						heapq.heappop(message_queue)
 						log_list.append(top_message)
@@ -184,7 +184,7 @@ class MessageHandler(threading.Thread):
 					# Tentando entregar as mensagens da fila
 					while message_queue:
 						(top_key, top_message) = message_queue[0]
-						if len(acks_received.get(top_key, set())) == len(PEERS): # se todos os peers receberam a mensagem do topo da fila
+						if len(acks_received.get(top_key, set())) == len(PEERS)-1: # se todos os peers receberam a mensagem do topo da fila
 							# Entregando a mensagem
 							heapq.heappop(message_queue)
 							log_list.append(top_message)
