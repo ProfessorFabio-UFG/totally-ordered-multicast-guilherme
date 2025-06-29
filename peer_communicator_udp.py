@@ -136,6 +136,7 @@ class MessageHandler(threading.Thread):
 		stop_count = 0
 		end_of_messages = False
 		while True:
+			global lamport_clock
 			message_pack = self.sock.recv(1024)  # receive data from client
 			msg = pickle.loads(message_pack)
 			
@@ -164,6 +165,34 @@ class MessageHandler(threading.Thread):
 						heapq.heappop(message_queue)
 						log_list.append(top_message)
 						print(f"Delivered message {top_message[1]} from process {top_message[0]} with timestamp {top_message[2]}")
+
+						# Se a mensagem é a última, ele deve sinalizar para todos os peers que não tem mais mensagens para enviar
+						if len(top_message[1]) >= M:
+							message = (-1, -1, lamport_clock)
+							message_pack = pickle.dumps(message)
+							for peer in PEERS:
+								self.send_sock.sendto(message_pack, (peer, PEER_UDP_PORT))
+							print(f'Sent final message {message} with timestamp {lamport_clock} to {peer}')
+							end_of_messages = True
+							break
+						
+						# Se a mensagem é para o próprio peer, ele deve responder
+						# para todos os peers nomeando o peer que deve responder em seguida
+						elif top_message[1][-1] == str(myself):
+							# Escolhendo um peer aleatório para responder em seguida
+							# mas não o próprio peer
+							next_peer = myself
+							while next_peer == myself:
+								next_peer = random.randint(0, N-1)
+
+							# Enviando a mensagem para todos os peers
+							message_content = top_message[1] + str(myself) + str(next_peer)
+							lamport_clock += 1
+							message = (myself, message_content, lamport_clock)
+							message_pack = pickle.dumps(message)
+							for peer in PEERS:
+								self.send_sock.sendto(message_pack, (peer, PEER_UDP_PORT))
+								print(f'Sent message {message_content} with timestamp {lamport_clock} to {peer}')
 					else:
 						break # a próxima mensagem não tem todos os acks ainda
 			else:
@@ -171,7 +200,6 @@ class MessageHandler(threading.Thread):
 					sender_id, message_number, received_timestamp = msg
 
 					# Incrementando o relógio de Lamport com base na mensagem recebida
-					global lamport_clock
 					lamport_clock = max(lamport_clock, received_timestamp) + 1
 
 					# Enfileirando a mensagem recebida
