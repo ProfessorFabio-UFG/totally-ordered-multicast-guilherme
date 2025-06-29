@@ -274,14 +274,14 @@ if __name__ == '__main__':
 				while True:
                     # Fica aguardando por 2 segundos para receber a confirmação de handshake
                     # de forma interminente
-					response_pack = send_socket.recvfrom(1024)
+					response_pack, _ = send_socket.recvfrom(1024)
 					response = pickle.loads(response_pack)
 
 					if response[0] == 'HANDSHAKE_ACK' and response[1] == adress_to_send:
 						print('Handshake confirmed from ', response[1])
 						handshake_confirmations[response[1]] = True
 						break
-			except socket.timeout:
+			except TimeoutError:
 				print('Timeout waiting for handshake confirmation from ', adress_to_send)
 				break
                 
