@@ -245,7 +245,7 @@ if __name__ == '__main__':
 		#	Wait for other processes to be ready
 		#	TODO: fix bug that causes a failure when not all processes are started within this time
 		#	(fully started processes start sending data messages, which the others try to interpret as control messages)
-		time.sleep(10)
+		time.sleep(5)
 
 		# Criando o handler de recebimento de handshakes e mensagens,
 		# que é iniciado em uma thread separada para não bloquear a execução do programa
@@ -270,12 +270,12 @@ if __name__ == '__main__':
             # TODO: Verificar a necessidade de reenviar o handshake caso a confirmação demore demais
 			try:
 				print("Waiting for handshake confirmation from ", adress_to_send)
-				# send_socket.settimeout(10.0)
-						
+				# receive_socket.settimeout(10.0)
+
 				while True:
                     # Fica aguardando por 2 segundos para receber a confirmação de handshake
                     # de forma interminente
-					response_pack, _ = send_socket.recvfrom(1024)
+					response_pack, _ = receive_socket.recvfrom(1024)
 					response = pickle.loads(response_pack)
 
 					if response[0] == 'HANDSHAKE_ACK' and response[1] == adress_to_send:
