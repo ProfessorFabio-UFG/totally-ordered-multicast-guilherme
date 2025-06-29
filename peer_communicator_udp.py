@@ -64,30 +64,36 @@ def register_with_group_manager():
 
 
 def get_list_of_peers():
-    """
-    Obtém a lista de peers do gerente de grupo.
-    """
-    clientSock = socket(AF_INET, SOCK_STREAM)
-    print('Connecting to group manager: ', (GROUPMNGR_ADDR, GROUPMNGR_TCP_PORT))
-    clientSock.connect((GROUPMNGR_ADDR, GROUPMNGR_TCP_PORT))
-    req = {"op": "list"}
-    msg = pickle.dumps(req)
-    print('Getting list of peers from group manager: ', req)
-    clientSock.send(msg)
-    msg = clientSock.recv(2048)
-    PEERS = pickle.loads(msg)
-    print('Got list of peers: ', PEERS)
-    clientSock.close()
-    return PEERS
+	"""
+	Obtém a lista de peers do gerente de grupo.
+	"""
+	clientSock = socket(AF_INET, SOCK_STREAM)
+	print('Connecting to group manager: ', (GROUPMNGR_ADDR, GROUPMNGR_TCP_PORT))
+	clientSock.connect((GROUPMNGR_ADDR, GROUPMNGR_TCP_PORT))
+	req = {"op": "list"}
+	msg = pickle.dumps(req)
+	print('Getting list of peers from group manager: ', req)
+	clientSock.send(msg)
+	msg = clientSock.recv(2048)
+	PEERS = pickle.loads(msg)
+
+	my_ip = get_public_ip()
+	if my_ip in PEERS:
+		PEERS.remove(my_ip)
+
+	print('Got list of peers: ', PEERS)
+	clientSock.close()
+	return PEERS
 
 
 class MessageHandler(threading.Thread):
 	"""
 	Handler de recebimento de handshakes e mensagens.
 	"""
-	def __init__(self, sock):
+	def __init__(self, sock, send_sock):
 		threading.Thread.__init__(self)
 		self.sock = sock
+		self.send_sock = send_sock
 
 	def run(self):
 		print('Handler is ready. Waiting for the handshakes...')
@@ -113,7 +119,7 @@ class MessageHandler(threading.Thread):
 				print(f"Sending handshake confirmation to {sender_address} with socket {PEER_UDP_PORT}")
 				ack_message = ('HANDSHAKE_ACK', myself)
 				ack_message_pack = pickle.dumps(ack_message)
-				self.sock.sendto(ack_message_pack, (sender_address[0], PEER_UDP_PORT))
+				self.send_sock.sendto(ack_message_pack, (sender_address[0], PEER_UDP_PORT))
 				
 				# Utilizar para verificar se todos os peers enviaram o handshake
 				# handShakes[msg[1]] = 1
@@ -172,7 +178,7 @@ class MessageHandler(threading.Thread):
 					ack = ("ACK", myself, received_timestamp, sender_id)
 					ack_pack = pickle.dumps(ack)
 					for peer in PEERS:
-						self.sock.sendto(ack_pack, (peer, PEER_UDP_PORT))
+						self.send_sock.sendto(ack_pack, (peer, PEER_UDP_PORT))
 
 					# Já que recebemos uma nova mensagem, verificamos se há mensagens na fila para serem entregues
 					# Tentando entregar as mensagens da fila
@@ -249,52 +255,62 @@ if __name__ == '__main__':
 
 		# Criando o handler de recebimento de handshakes e mensagens,
 		# que é iniciado em uma thread separada para não bloquear a execução do programa
-		msgHandler = MessageHandler(receive_socket)
+		msgHandler = MessageHandler(receive_socket, send_socket)
 		msgHandler.start()
 		print('Handler started')
 
 		# Recebendo a lista de peers
 		PEERS = get_list_of_peers()
 
-		# Dicionário para armazenar as confirmações de handshake recebidas de cada peer
-		handshake_confirmations = {peer: False for peer in PEERS}
+		# # Dicionário para armazenar as confirmações de handshake recebidas de cada peer
+		# handshake_confirmations = {peer: False for peer in PEERS}
 
-		# Enviando handshakes para todos os peers e esperando as confirmações de cada um
-		for adress_to_send in PEERS:
-			print('Sending handshake to ', adress_to_send)
+		# # Enviando handshakes para todos os peers e esperando as confirmações de cada um
+		# for adress_to_send in PEERS:
+		# 	print('Sending handshake to ', adress_to_send)
+		# 	msg = ('READY', myself)
+		# 	message_pack = pickle.dumps(msg)
+		# 	send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
+
+		# 	# Esperando a confirmação de handshake do peer destinatário atual
+        #     # TODO: Verificar a necessidade de reenviar o handshake caso a confirmação demore demais
+		# 	try:
+		# 		print(f"Waiting for handshake confirmation from {adress_to_send} with socket {receive_socket}")
+		# 		# receive_socket.settimeout(10.0)
+
+		# 		while True:
+        #             # Fica aguardando por 2 segundos para receber a confirmação de handshake
+        #             # de forma interminente
+		# 			response_pack, _ = receive_socket.recvfrom(1024)
+		# 			response = pickle.loads(response_pack)
+
+		# 			print(f"On waiting for handshake confirmation from {adress_to_send}: Received response {response}")
+
+		# 			if response[0] == 'HANDSHAKE_ACK' and response[1] == adress_to_send:
+		# 				print('Handshake confirmed from ', response[1])
+		# 				handshake_confirmations[response[1]] = True
+		# 				break
+		# 	except TimeoutError:
+		# 		print('Timeout waiting for handshake confirmation from ', adress_to_send)
+		# 		break
+
+		print('Main Thread: Sending handshakes to all peers...')
+		# Enviando handshakes para todos os peers
+		for address_to_send in PEERS:
+			print('Sending handshake to ', address_to_send)
 			msg = ('READY', myself)
 			message_pack = pickle.dumps(msg)
-			send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
+			send_socket.sendto(message_pack, (address_to_send, PEER_UDP_PORT))
 
-			# Esperando a confirmação de handshake do peer destinatário atual
-            # TODO: Verificar a necessidade de reenviar o handshake caso a confirmação demore demais
-			try:
-				print(f"Waiting for handshake confirmation from {adress_to_send} with socket {receive_socket}")
-				# receive_socket.settimeout(10.0)
-
-				while True:
-                    # Fica aguardando por 2 segundos para receber a confirmação de handshake
-                    # de forma interminente
-					response_pack, _ = receive_socket.recvfrom(1024)
-					response = pickle.loads(response_pack)
-
-					print(f"On waiting for handshake confirmation from {adress_to_send}: Received response {response}")
-
-					if response[0] == 'HANDSHAKE_ACK' and response[1] == adress_to_send:
-						print('Handshake confirmed from ', response[1])
-						handshake_confirmations[response[1]] = True
-						break
-			except TimeoutError:
-				print('Timeout waiting for handshake confirmation from ', adress_to_send)
-				break
-                
-		print('Main Thread: Sent all handshakes. handshake_count=', str(handshake_count))
+		print('Main Thread: Sent all handshakes. Waiting for handshake completion...')
 
 		# Aguardando a quantidade de handshakes recebidos ser igual ao número de peers.
 		# Eles são recebidos na thread do MessageHandler.
 		# while handshake_count < N:
 		# 	pass  # TODO: find a better way to wait for the handshakes
 		handshake_complete_event.wait()
+                
+		print('Main Thread: Sent all handshakes. handshake_count=', str(handshake_count))
 
 		# Enviando todas as mensagens que ele deve para os outros peers
 		for message_number in range(0, number_of_messages):
