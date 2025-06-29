@@ -107,7 +107,7 @@ class MessageHandler(threading.Thread):
 		# Recebendo handshakes e enviando confirmações de handshake.
 		# Espera-se até que N handshakes sejam recebidos.
 		# TODO: verificar se o handshake é recebido de todos os peers e não apenas N
-		while handshake_count < N:
+		while handshake_count < N-1:
 			message_pack, sender_address = self.sock.recvfrom(1024)
 			msg = pickle.loads(message_pack)
 			
