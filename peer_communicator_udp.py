@@ -134,13 +134,16 @@ class MessageHandler(threading.Thread):
 		# Recebendo as mensagens dos outros peers até que
 		# todos eles mandem uma mensagem de parada (-1, -1)
 		stop_count = 0
+		end_of_messages = False
 		while True:
 			message_pack = self.sock.recv(1024)  # receive data from client
 			msg = pickle.loads(message_pack)
 			
+			if end_of_messages:
+				break # este peer identificou que não tem mais mensagens para enviar
 			# Se for uma mensagem de parada, isto é, o peer não tem mais mensagens para enviar,
 			# incrementa o contador de paradas até N
-			if msg[0] == -1:
+			elif msg[0] == -1:
 				stop_count = stop_count + 1
 				if stop_count == N-1:
 					break  # parando quando todos os peers sinalizarem encerramento
@@ -199,7 +202,8 @@ class MessageHandler(threading.Thread):
 								message_pack = pickle.dumps(message)
 								for peer in PEERS:
 									self.send_sock.sendto(message_pack, (peer, PEER_UDP_PORT))
-								print(f'Sent message {message} with timestamp {lamport_clock} to {peer}')
+								print(f'Sent final message {message} with timestamp {lamport_clock} to {peer}')
+								end_of_messages = True
 								continue
 							
 							# Se a mensagem é para o próprio peer, ele deve responder
@@ -212,7 +216,7 @@ class MessageHandler(threading.Thread):
 									next_peer = random.randint(0, N-1)
 
 								# Enviando a mensagem para todos os peers
-								message_content = top_message[1] + str(next_peer)
+								message_content = top_message[1] + str(myself) + str(next_peer)
 								lamport_clock += 1
 								message = (myself, message_content, lamport_clock)
 								message_pack = pickle.dumps(message)
