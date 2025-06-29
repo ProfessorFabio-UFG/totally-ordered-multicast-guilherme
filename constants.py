@@ -8,7 +8,7 @@ PEER_TCP_PORT = 5679
 N = 2
 
 # Endereço e portas do servidor de comparação e gerenciamento de grupo
-SERVER_ADDR ='18.246.153.223'
+SERVER_ADDR ='35.167.48.184'
 SERVER_PORT = 5678
-GROUPMNGR_ADDR = '18.246.153.223'
+GROUPMNGR_ADDR = '35.167.48.184'
 GROUPMNGR_TCP_PORT = 5680
