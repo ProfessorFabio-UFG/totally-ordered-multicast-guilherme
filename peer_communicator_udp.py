@@ -29,6 +29,9 @@ acks_received = {}
 # Armazena a lista de peers
 PEERS = []
 
+# Quantidade de mensagens que devem ser trocadas
+M = 10
+
 # Socket UDP para enviar e receber mensagens
 send_socket = socket(AF_INET, SOCK_DGRAM)
 receive_socket = socket(AF_INET, SOCK_DGRAM)
@@ -189,6 +192,36 @@ class MessageHandler(threading.Thread):
 							heapq.heappop(message_queue)
 							log_list.append(top_message)
 							print(f"Delivered message {top_message[1]} from process {top_message[0]} with timestamp {top_message[2]}")
+							
+							# Se a mensagem é a última, ele deve sinalizar para todos os peers que não tem mais mensagens para enviar
+							if len(top_message[1]) >= M:
+								message = (-1, -1, lamport_clock)
+								message_pack = pickle.dumps(message)
+								for peer in PEERS:
+									self.send_sock.sendto(message_pack, (peer, PEER_UDP_PORT))
+								print(f'Sent message {message} with timestamp {lamport_clock} to {peer}')
+								continue
+							
+							# Se a mensagem é para o próprio peer, ele deve responder
+							# para todos os peers nomeando o peer que deve responder em seguida
+							elif top_message[1][-1] == str(myself):
+								# Escolhendo um peer aleatório para responder em seguida
+								# mas não o próprio peer
+								next_peer = myself
+								while next_peer == myself:
+									next_peer = random.randint(0, N-1)
+
+								# Enviando a mensagem para todos os peers
+								message_content = top_message[1] + str(next_peer)
+								lamport_clock += 1
+								message = (myself, message_content, lamport_clock)
+								message_pack = pickle.dumps(message)
+								for peer in PEERS:
+									self.send_sock.sendto(message_pack, (peer, PEER_UDP_PORT))
+									print(f'Sent message {message_content} with timestamp {lamport_clock} to {peer}')
+							else:
+								# Se a mensagem não é para este peer, ele deve ficar quieto
+								pass
 						else:
 							break # a próxima mensagem não tem todos os acks ainda
 
@@ -312,23 +345,42 @@ if __name__ == '__main__':
                 
 		print('Main Thread: Sent all handshakes. handshake_count=', str(handshake_count))
 
-		# Enviando todas as mensagens que ele deve para os outros peers
-		for message_number in range(0, number_of_messages):
-			# Esperando um tempo aleatório entre a mensagem anterior e a próxima
-			time.sleep(random.randrange(10, 100) / 1000)
-
-			# Incrementando o relógio de Lamport
+		# Enviando a mensagem de estado inicial para todos os peers
+		# Quem envia é o peer 0, que escolhe um peer aleatório para responder em seguida
+		if myself == 0:
 			lamport_clock += 1
-					
-			# Enviando a mensagem para todos os peers
-			msg = (myself, message_number, lamport_clock)
-			message_pack = pickle.dumps(msg)
-			for adress_to_send in PEERS:
-				send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
-				print(f'Sent message {message_number} with timestamp {lamport_clock}')
 
-		# Sinalizando para todos os peers que ele não tem mais mensagens para enviar
-		for adress_to_send in PEERS:
-			msg = (-1, -1, lamport_clock)
-			message_pack = pickle.dumps(msg)
-			send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
+			# Escolhendo um peer aleatório para responder em seguida
+			# mas não o próprio peer
+			next_peer = myself
+			while next_peer == myself:
+				next_peer = random.randint(0, N-1)
+
+			# Enviando a mensagem de estado inicial para todos os peers
+			message_content = "0" + str(next_peer)
+			message = (myself, message_content, lamport_clock)
+			message_pack = pickle.dumps(message)
+			for address_to_send in PEERS:
+				send_socket.sendto(message_pack, (address_to_send, PEER_UDP_PORT))
+				print(f'Sent message {message_content} with timestamp {lamport_clock} to {address_to_send}')
+
+		# # Enviando todas as mensagens que ele deve para os outros peers
+		# for message_number in range(0, number_of_messages):
+		# 	# Esperando um tempo aleatório entre a mensagem anterior e a próxima
+		# 	time.sleep(random.randrange(10, 100) / 1000)
+
+		# 	# Incrementando o relógio de Lamport
+		# 	lamport_clock += 1
+					
+		# 	# Enviando a mensagem para todos os peers
+		# 	msg = (myself, message_number, lamport_clock)
+		# 	message_pack = pickle.dumps(msg)
+		# 	for adress_to_send in PEERS:
+		# 		send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
+		# 		print(f'Sent message {message_number} with timestamp {lamport_clock}')
+
+		# # Sinalizando para todos os peers que ele não tem mais mensagens para enviar
+		# for adress_to_send in PEERS:
+		# 	msg = (-1, -1, lamport_clock)
+		# 	message_pack = pickle.dumps(msg)
+		# 	send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))

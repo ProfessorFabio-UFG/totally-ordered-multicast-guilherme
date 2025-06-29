@@ -83,17 +83,17 @@ def wait_for_logs_and_compare(N_MSGS):
 		messages.append(pickle.loads(msgPack))
 		number_of_peers = number_of_peers + 1
 
-	unordered = False
+	unordered_messages = 0
 
 	# Verificando se as mensagens estão ordenadas
 	for j in range(0, N_MSGS-1):
 		first_message = messages[0][j]
 		for i in range(1, N-1):
 			if first_message != messages[i][j]:
-				unordered = unordered + 1
+				unordered_messages = unordered_messages + 1
 				break
 	
-	print ('Found ' + str(unordered) + ' unordered message rounds')
+	print ('Found ' + str(unordered_messages) + ' unordered message rounds')
 
 if __name__ == "__main__":
 	main_loop()
