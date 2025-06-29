@@ -6,3 +6,26 @@ The peer processes run the PeerCommunicatorUDP.py program, which has two separat
 
 
 In order to actually see the problem, it is necessary to run the peer processes on different networks (e.g., run some of the processes in one region of the cloud, whereas the others are run on another region).
+
+## `comparison_server.py`
+
+Este script é responsável por:
+1. Receber do usuário a quantidade de mensagens que cada peer deve enviar
+2. Obter a lista de peers
+3. Iniciar os peers (enviando o número do peer a ele mesmo e a quantidade de mensagens que ele deve enviar)
+4. Aguardar os logs de mensagens dos peers
+5. Comparar os logs de mensagens dos peers e determinar se as mensagens estão ordenadas
+
+## `group_manager.py`
+
+Este script é responsável por:
+1. Receber o registro de um peer
+2. Enviar a lista de peers para o processo que solicitou
+
+## `peer_communicator_udp.py`
+
+Este script é responsável por:
+1. Controlar a dinâmica de um peer.
+2. Enviar e receber handshakes para sincronizar os peers.
+3. Enviar e receber mensagens para os outros peers.
+4. Sinalizar para todos os peers que ele não tem mais mensagens para enviar.
