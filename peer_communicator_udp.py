@@ -113,7 +113,7 @@ class MessageHandler(threading.Thread):
 				print(f"Sending handshake confirmation to {sender_address} with socket {self.sock}")
 				ack_message = ('HANDSHAKE_ACK', myself)
 				ack_message_pack = pickle.dumps(ack_message)
-				self.sock.sendto(ack_message_pack, sender_address)
+				self.sock.sendto(ack_message_pack, (sender_address[0], PEER_UDP_PORT))
 				
 				# Utilizar para verificar se todos os peers enviaram o handshake
 				# handShakes[msg[1]] = 1
@@ -172,7 +172,7 @@ class MessageHandler(threading.Thread):
 					ack = ("ACK", myself, received_timestamp, sender_id)
 					ack_pack = pickle.dumps(ack)
 					for peer in PEERS:
-							self.sock.sendto(ack_pack, (peer, PEER_UDP_PORT))
+						self.sock.sendto(ack_pack, (peer, PEER_UDP_PORT))
 
 					# Já que recebemos uma nova mensagem, verificamos se há mensagens na fila para serem entregues
 					# Tentando entregar as mensagens da fila
