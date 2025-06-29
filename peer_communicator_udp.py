@@ -11,6 +11,8 @@ from requests import get
 # Counter to make sure we have received handshakes from all other processes
 handshake_count = 0
 
+handshake_complete_event = threading.Event()
+
 # Armazena a lista de peers
 PEERS = []
 
@@ -67,72 +69,81 @@ def get_list_of_peers():
 
 
 class MessageHandler(threading.Thread):
-    """
-    Handler de recebimento de handshakes e mensagens.
-    """
-    def __init__(self, sock):
-        threading.Thread.__init__(self)
-        self.sock = sock
+	"""
+	Handler de recebimento de handshakes e mensagens.
+	"""
+	def __init__(self, sock):
+		threading.Thread.__init__(self)
+		self.sock = sock
 
-    def run(self):
-        print('Handler is ready. Waiting for the handshakes...')
-        global handshake_count
-        
+	def run(self):
+		print('Handler is ready. Waiting for the handshakes...')
+		global handshake_count
 
-        log_list = []
+		# Lista de mensagens recebidas
+		log_list = []
 
-        # Esperando até que todos os peers tenham enviado o handshake
-        # para garantir que todos os peers estão sincronizados antes de começar a troca de mensagens
-        while handshake_count < N:
-            msgPack = self.sock.recv(1024)
-            msg = pickle.loads(msgPack)
-            
-            if msg[0] == 'READY': # Recebendo handshake
-				# TODO: enviar confirmação de handshake e aguardar confirmação
-                handshake_count = handshake_count + 1
-                print('--- Handshake received: ', msg[1])
-                
+		# received_handshakes = {peer: False for peer in PEERS}
+
+		# Recebendo handshakes e enviando confirmações de handshake.
+		# Espera-se até que N handshakes sejam recebidos.
+		# TODO: verificar se o handshake é recebido de todos os peers e não apenas N
+		while handshake_count < N:
+			message_pack, sender_address = self.sock.recvfrom(1024)
+			msg = pickle.loads(message_pack)
+			
+			if msg[0] == 'READY': # Recebendo handshake
+				handshake_count = handshake_count + 1
+				print('--- Handshake received: ', msg[1])
+
+				# Enviando confirmação de handshake
+				ack_message = ('HANDSHAKE_ACK', myself)
+				ack_message_pack = pickle.dumps(ack_message)
+				self.sock.sendto(ack_message_pack, sender_address)
+				
 				# Utilizar para verificar se todos os peers enviaram o handshake
 				# handShakes[msg[1]] = 1
 
-        print('Secondary Thread: Received all handshakes. Entering the loop to receive messages.')
+		handshake_complete_event.set()
+
+		print('Secondary Thread: Received all handshakes. Entering the loop to receive messages.')
 
 		# Recebendo as mensagens dos outros peers até que
-        # todos eles mandem uma mensagem de parada (-1, -1)
-        stop_count = 0
-        while True:
-            msgPack = self.sock.recv(1024)  # receive data from client
-            msg = pickle.loads(msgPack)
-            
+		# todos eles mandem uma mensagem de parada (-1, -1)
+		stop_count = 0
+		while True:
+			message_pack = self.sock.recv(1024)  # receive data from client
+			msg = pickle.loads(message_pack)
+			
 			# Se for uma mensagem de parada, isto é, o peer não tem mais mensagens para enviar,
-            # incrementa o contador de paradas até N
-            if msg[0] == -1:
-                stop_count = stop_count + 1
-                if stop_count == N:
-                    break  # parando quando todos os peers sinalizarem encerramento
-            else:
-                # Guardando a mensagem recebida
-                print('Message ' + str(msg[1]) + ' from process ' + str(msg[0]))
-                log_list.append(msg)
+			# incrementa o contador de paradas até N
+			if msg[0] == -1:
+				stop_count = stop_count + 1
+				if stop_count == N:
+					break  # parando quando todos os peers sinalizarem encerramento
+			else:
+				# Guardando a mensagem recebida
+				print('Message ' + str(msg[1]) + ' from process ' + str(msg[0]))
+				log_list.append(msg)
 
-        # Salvando a lista de mensagens recebidas por este peer em um arquivo de log
-        logfile = open('logfile' + str(myself) + '.log', 'w')
-        logfile.writelines(str(log_list))
-        logfile.close()
+		# Salvando a lista de mensagens recebidas por este peer em um arquivo de log
+		logfile = open('logfile' + str(myself) + '.log', 'w')
+		logfile.writelines(str(log_list))
+		logfile.close()
 
-        # Enviando a lista log de mensagens recebidas por este peer para o servidor de comparação
-        print('Sending the list of messages to the server for comparison...')
-        clientSock = socket(AF_INET, SOCK_STREAM)
-        clientSock.connect((SERVER_ADDR, SERVER_PORT))
-        msgPack = pickle.dumps(log_list)
-        clientSock.send(msgPack)
-        clientSock.close()
+		# Enviando a lista log de mensagens recebidas por este peer para o servidor de comparação
+		print('Sending the list of messages to the server for comparison...')
+		clientSock = socket(AF_INET, SOCK_STREAM)
+		clientSock.connect((SERVER_ADDR, SERVER_PORT))
+		message_pack = pickle.dumps(log_list)
+		clientSock.send(message_pack)
+		clientSock.close()
 
-        # Resetando o contador de handshake para uma próxima rodada de envio de mensagens
-        handshake_count = 0
+		# Resetando o contador de handshake para uma próxima rodada de envio de mensagens
+		handshake_count = 0
 
 		# Encerrando a thread de recebimento de mensagens
-        exit(0)
+		exit(0)
 
 
 def wait_to_start():
@@ -142,15 +153,15 @@ def wait_to_start():
     """
     # Recebendo o sinal de início do servidor de comparação
     (conn, addr) = serverSock.accept()
-    msgPack = conn.recv(1024)
-    msg = pickle.loads(msgPack)
+    message_pack = conn.recv(1024)
+    msg = pickle.loads(message_pack)
     myself = msg[0]
     number_of_messages = msg[1]
 
     # Enviando uma confirmação de que o peer iniciou
     conn.send(pickle.dumps('Peer process ' + str(myself) + ' started.'))
     conn.close()
-    
+
     return (myself, number_of_messages)
 
 
@@ -159,7 +170,7 @@ if __name__ == '__main__':
 	register_with_group_manager()
       
 	while True:
-        # Aguardando o sinal de início do servidor de comparação
+		# Aguardando o sinal de início do servidor de comparação
 		print('Waiting for signal to start...')
 		(myself, number_of_messages) = wait_to_start()
 		print('I am up, and my ID is: ', str(myself))
@@ -169,51 +180,74 @@ if __name__ == '__main__':
 			print('Terminating.')
 			exit(0)
 
-		# Wait for other processes to be ready
-		# TODO: fix bug that causes a failure when not all processes are started within this time
-		# (fully started processes start sending data messages, which the others try to interpret as control messages)
-		time.sleep(5)
+		# TODO: Verificar se é necessário mais alguma alteração para garantir que todos
+		# os peers estão prontos para receber mensagens
+		#	Wait for other processes to be ready
+		#	TODO: fix bug that causes a failure when not all processes are started within this time
+		#	(fully started processes start sending data messages, which the others try to interpret as control messages)
+		#	time.sleep(5)
 
-		# Criando o handler de recebimento de mensagens,
-        # que é iniciado em uma thread separada para não bloquear a execução do programa
+		# Criando o handler de recebimento de handshakes e mensagens,
+		# que é iniciado em uma thread separada para não bloquear a execução do programa
 		msgHandler = MessageHandler(receive_socket)
 		msgHandler.start()
 		print('Handler started')
 
+		# Recebendo a lista de peers
 		PEERS = get_list_of_peers()
 
-        # Enviando handshakes para todos os peers
-        # TODO:
-		# - Os handshakes devem ser enviados até que seja recebida uma confirmação de cada um dos peers
-        # - Deve ser enviada uma confirmação de cada handshake recebido
+		# Dicionário para armazenar as confirmações de handshake recebidas de cada peer
+		handshake_confirmations = {peer: False for peer in PEERS}
+
+		# Enviando handshakes para todos os peers e esperando as confirmações de cada um
 		for adress_to_send in PEERS:
 			print('Sending handshake to ', adress_to_send)
 			msg = ('READY', myself)
-			msgPack = pickle.dumps(msg)
-			send_socket.sendto(msgPack, (adress_to_send, PEER_UDP_PORT))
-			# data = receive_socket.recvfrom(128) # Handshake confirmations have not yet been implemented
-		
+			message_pack = pickle.dumps(msg)
+			send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
+
+			# Esperando a confirmação de handshake do peer destinatário atual
+            # TODO: Verificar a necessidade de reenviar o handshake caso a confirmação demore demais
+			try:
+				print("Waiting for handshake confirmation from ", adress_to_send)
+				send_socket.settimeout(2.0)
+						
+				while True:
+                    # Fica aguardando por 2 segundos para receber a confirmação de handshake
+                    # de forma interminente
+					response_pack = send_socket.recvfrom(1024)
+					response = pickle.loads(response_pack)
+
+					if response[0] == 'HANDSHAKE_ACK' and response[1] == adress_to_send:
+						print('Handshake confirmed from ', response[1])
+						handshake_confirmations[response[1]] = True
+						break
+			except socket.timeout:
+				print('Timeout waiting for handshake confirmation from ', adress_to_send)
+				break
+                
 		print('Main Thread: Sent all handshakes. handshake_count=', str(handshake_count))
 
 		# Aguardando a quantidade de handshakes recebidos ser igual ao número de peers.
-        # Eles são recebidos na thread do MessageHandler.
-		while handshake_count < N:
-			pass  # TODO: find a better way to wait for the handshakes
+		# Eles são recebidos na thread do MessageHandler.
+		# while handshake_count < N:
+		# 	pass  # TODO: find a better way to wait for the handshakes
+		handshake_complete_event.wait()
 
 		# Enviando todas as mensagens que ele deve para os outros peers
 		for message_number in range(0, number_of_messages):
 			# Esperando um tempo aleatório entre a mensagem anterior e a próxima
 			time.sleep(random.randrange(10, 100) / 1000)
-                  
+					
 			# Enviando a mensagem para todos os peers
 			msg = (myself, message_number)
-			msgPack = pickle.dumps(msg)
+			message_pack = pickle.dumps(msg)
 			for adress_to_send in PEERS:
-				send_socket.sendto(msgPack, (adress_to_send, PEER_UDP_PORT))
+				send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
 				print('Sent message ' + str(message_number))
 
 		# Sinalizando para todos os peers que ele não tem mais mensagens para enviar
 		for adress_to_send in PEERS:
 			msg = (-1, -1)
-			msgPack = pickle.dumps(msg)
-			send_socket.sendto(msgPack, (adress_to_send, PEER_UDP_PORT))
+			message_pack = pickle.dumps(msg)
+			send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
