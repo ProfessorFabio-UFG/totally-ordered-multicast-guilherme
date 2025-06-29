@@ -5,7 +5,7 @@ PEER_UDP_PORT = 6789
 PEER_TCP_PORT = 5679
 
 # Número de peers
-N = 6
+N = 2
 
 # Endereço e portas do servidor de comparação e gerenciamento de grupo
 SERVER_ADDR ='18.246.153.223'
