@@ -109,10 +109,11 @@ def flush_queue_until_empty():
 	print("Mensagens que sobraram na fila:")
 	for message in message_queue:
 		print(f"Message in queue: {message}")
+		print(f"\tAcks received: {acks_received.get(message[0], set())}")
 
 	while message_queue:
 		top_key, top_message = message_queue[0]
-		if len(acks_received.get(top_key, set())) == len(PEERS) - 1:
+		if len(acks_received.get(top_key, set())) == len(PEERS):
 			heapq.heappop(message_queue)
 			log_list.append(top_message)
 			print(f"Delivered (late) {top_message}")
@@ -191,7 +192,7 @@ class MessageHandler(threading.Thread):
 				# Tentando entregar as mensagens da fila
 				while message_queue:
 					(top_key, top_message) = message_queue[0]
-					if len(acks_received.get(top_key, set())) == len(PEERS)-1: # se todos os peers receberam a mensagem do topo da fila
+					if len(acks_received.get(top_key, set())) == len(PEERS): # se todos os peers receberam a mensagem do topo da fila
 						# Entregando a mensagem
 						heapq.heappop(message_queue)
 						log_list.append(top_message)
@@ -227,7 +228,7 @@ class MessageHandler(threading.Thread):
 					# Tentando entregar as mensagens da fila
 					while message_queue:
 						(top_key, top_message) = message_queue[0]
-						if len(acks_received.get(top_key, set())) == len(PEERS)-1: # se todos os peers receberam a mensagem do topo da fila
+						if len(acks_received.get(top_key, set())) == len(PEERS): # se todos os peers receberam a mensagem do topo da fila
 							# Entregando a mensagem
 							heapq.heappop(message_queue)
 							log_list.append(top_message)
