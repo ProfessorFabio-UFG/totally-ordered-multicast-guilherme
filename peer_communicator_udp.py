@@ -18,6 +18,8 @@ handshake_complete_event = threading.Event()
 # Relógio de Lamport
 lamport_clock = 0
 
+log_list = []
+
 # Fila de mensagens recebidas antes de serem entregues
 message_queue = []
 
@@ -85,6 +87,32 @@ def get_list_of_peers():
 	clientSock.close()
 	return PEERS
 
+def wait_all_my_message_acks_received(number_of_messages, myself):
+	"""
+	Aguarda todos os ACKs relacionados a mensagens deste peer.
+	"""
+	while True:
+		acks_ok = True
+		for key, value in acks_received.items():
+			if key[1] == myself and len(value) < N-1:
+				acks_ok = False
+				break
+		if acks_ok:
+			break
+		time.sleep(0.1)
+
+def flush_queue_until_empty():
+	"""
+	Entrega todas as mensagens restantes na fila.
+	"""
+	while message_queue:
+		top_key, top_message = message_queue[0]
+		if len(acks_received.get(top_key, set())) == len(PEERS) - 1:
+			heapq.heappop(message_queue)
+			log_list.append(top_message)
+			print(f"Delivered (late) {top_message}")
+		else:
+			time.sleep(0.05)
 
 class MessageHandler(threading.Thread):
 	"""
@@ -98,6 +126,7 @@ class MessageHandler(threading.Thread):
 	def run(self):
 		print('Handler is ready. Waiting for the handshakes...')
 		global handshake_count
+		global log_list
 
 		# Lista de mensagens recebidas
 		log_list = []
@@ -140,6 +169,7 @@ class MessageHandler(threading.Thread):
 			if msg[0] == -1:
 				stop_count = stop_count + 1
 				if stop_count == N-1:
+					flush_queue_until_empty() # entrega todas as mensagens restantes na fila
 					break  # parando quando todos os peers sinalizarem encerramento
 			elif isinstance(msg, tuple) and msg[0] == "ACK": # recebendo confirmação de recebimento de mensagem
 				_, ack_sender, ack_timestamp, ack_message_sender_id = msg
@@ -326,6 +356,9 @@ if __name__ == '__main__':
 			for adress_to_send in PEERS:
 				send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
 				print(f'Sent message {message_number} with timestamp {lamport_clock}')
+
+		# Aguarda todos os ACKs das mensagens deste peer
+		wait_all_my_message_acks_received(number_of_messages, myself)
 
 		# Sinalizando para todos os peers que ele não tem mais mensagens para enviar
 		for adress_to_send in PEERS:
