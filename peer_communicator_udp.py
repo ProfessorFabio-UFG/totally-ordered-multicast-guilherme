@@ -98,7 +98,7 @@ def wait_all_my_message_acks_received(number_of_messages, myself):
 				acks_ok = False
 				break
 		if acks_ok:
-			break
+			return
 		time.sleep(0.1)
 
 def flush_queue_until_empty():
@@ -174,6 +174,8 @@ class MessageHandler(threading.Thread):
 			elif isinstance(msg, tuple) and msg[0] == "ACK": # recebendo confirmação de recebimento de mensagem
 				_, ack_sender, ack_timestamp, ack_message_sender_id = msg
 				key = (ack_timestamp, ack_message_sender_id)
+
+				print(f"Received ACK from {ack_sender} for message {ack_message_sender_id} with timestamp {ack_timestamp}")
 
 				# Registrando a confirmação de recebimento da mensagem pelo peer que enviou o ack
 				if key not in acks_received:
