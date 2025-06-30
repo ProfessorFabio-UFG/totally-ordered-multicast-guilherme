@@ -105,6 +105,11 @@ def flush_queue_until_empty():
 	"""
 	Entrega todas as mensagens restantes na fila.
 	"""
+	# Exibindo a fila de mensagens
+	print("Mensagens que sobraram na fila:")
+	for message in message_queue:
+		print(f"Message in queue: {message}")
+
 	while message_queue:
 		top_key, top_message = message_queue[0]
 		if len(acks_received.get(top_key, set())) == len(PEERS) - 1:
@@ -170,6 +175,7 @@ class MessageHandler(threading.Thread):
 				stop_count = stop_count + 1
 				if stop_count == N-1:
 					flush_queue_until_empty() # entrega todas as mensagens restantes na fila
+					print("Todos os peers sinalizaram encerramento. Saindo do loop de recebimento de mensagens.")
 					break  # parando quando todos os peers sinalizarem encerramento
 			elif isinstance(msg, tuple) and msg[0] == "ACK": # recebendo confirmação de recebimento de mensagem
 				_, ack_sender, ack_timestamp, ack_message_sender_id = msg
