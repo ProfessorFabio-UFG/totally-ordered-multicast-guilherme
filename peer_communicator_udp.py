@@ -175,7 +175,7 @@ class MessageHandler(threading.Thread):
 				_, ack_sender, ack_timestamp, ack_message_sender_id = msg
 				key = (ack_timestamp, ack_message_sender_id)
 
-				print(f"Received ACK from {ack_sender} for message {ack_message_sender_id} with timestamp {ack_timestamp}")
+				print(f"Received ACK from {ack_sender} for message from {ack_message_sender_id} with timestamp {ack_timestamp}")
 
 				# Registrando a confirmação de recebimento da mensagem pelo peer que enviou o ack
 				if key not in acks_received:
@@ -205,8 +205,11 @@ class MessageHandler(threading.Thread):
 					# Enfileirando a mensagem recebida
 					heapq.heappush(message_queue, ((received_timestamp, sender_id), msg))
 
-					# Inicializando o controle de acks para esta mensagem recebida
-					acks_received[(received_timestamp, sender_id)] = set()
+					# Inicializando o controle de acks para esta mensagem recebida ou reaproveitando de um já existente
+					key = (received_timestamp, sender_id)
+					if key not in acks_received:
+						acks_received[key] = set()
+					acks_received[key].add(myself)
 
 					# Enviando confirmação de recebimento da mensagem para todos os peers
 					ack = ("ACK", myself, received_timestamp, sender_id)
