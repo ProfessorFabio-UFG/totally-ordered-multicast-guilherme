@@ -196,6 +196,8 @@ class MessageHandler(threading.Thread):
 				if isinstance(msg, tuple) and len(msg) == 3: # garantindo que é uma mensagem normal e não de controle
 					sender_id, message_number, received_timestamp = msg
 
+					print(f"Received message {message_number} from process {sender_id} with timestamp {received_timestamp}")
+
 					# Incrementando o relógio de Lamport com base na mensagem recebida
 					global lamport_clock
 					lamport_clock = max(lamport_clock, received_timestamp) + 1
