@@ -351,7 +351,7 @@ if __name__ == '__main__':
 		print('Handler started')
 
 		# Thread de reenvio de mensagens
-		resend_thread = threading.Thread(target=resend_messages_thread)
+		resend_thread = threading.Thread(target=resend_messages_thread, daemon=True)
 		resend_thread.start()
 		print('Resend thread started')
 
