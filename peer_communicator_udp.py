@@ -18,6 +18,7 @@ handshake_complete_event = threading.Event()
 # Relógio de Lamport
 lamport_clock = 0
 
+# Lista de mensagens recebidas
 log_list = []
 
 # Fila de mensagens recebidas antes de serem entregues
@@ -27,6 +28,12 @@ message_queue = []
 # Chave: (timestamp, sender_id), quem mandou a mensagem e quando ela foi enviada
 # Valor: Conjunto de peers que receberam a mensagem
 acks_received = {}
+
+# Controle de envio de mensagens enviadas aguardando acks
+pending_messages = {}
+# Chave: (timestamp, message_number), quem mandou a mensagem e quando ela foi enviada
+# Valor: (message_data, peers_pending_ack), a mensagem (para reenvio posterior caso necessário) e a lista de peers que ainda não enviaram o ack
+message_timeout = 5.0 # tempo máximo de espera para o ack de uma mensagem
 
 # Armazena a lista de peers
 PEERS = []
@@ -92,14 +99,13 @@ def wait_all_my_message_acks_received(number_of_messages, myself):
 	Aguarda todos os ACKs relacionados a mensagens deste peer.
 	"""
 	while True:
-		acks_ok = True
-		for key, value in acks_received.items():
-			if key[1] == myself and len(value) < N-1:
-				acks_ok = False
-				break
-		if acks_ok:
+		if not pending_messages:
+			print("All messages received")
 			return
-		time.sleep(0.1)
+		
+		print(f"Still waiting for acks of messages.... Pending messages:\n{pending_messages}")
+		
+		time.sleep(1)
 
 def flush_queue_until_empty():
 	"""
@@ -119,6 +125,33 @@ def flush_queue_until_empty():
 			print(f"Delivered (late) {top_message}")
 		else:
 			time.sleep(0.05)
+
+def resend_messages_thread():
+	"""
+	Verifica se há mensagens pendentes de ack e as reenvia caso necessário.
+	"""
+	while True:
+		current_time = time.time()
+		messages_to_resend = []
+
+		# Verificando mensagens que passaram do tempo de espera para o ack
+		for key, message_info in pending_messages.items():
+			if current_time - message_info['sent_time'] > message_timeout:
+				messages_to_resend.append((key, message_info))
+
+		# Reenviando as mensagens que passaram do tempo de espera para o ack
+		for key, message_info in messages_to_resend:
+			timestamp, message_number = key
+			peers_to_resend = list(message_info['peers_pending_ack'])
+
+			print(f"Resending message {message_number} to {peers_to_resend}")
+
+			for peer in peers_to_resend:
+				send_socket.sendto(message_info['message_pack'], (peer, PEER_UDP_PORT))
+
+			message_info['sent_time'] = current_time
+
+		time.sleep(1)
 
 class MessageHandler(threading.Thread):
 	"""
@@ -189,6 +222,19 @@ class MessageHandler(threading.Thread):
 					acks_received[key] = set()
 				acks_received[key].add(ack_sender)
 
+				# Removendo o peer da lista de pendentes se for uma mensagem deste peer
+				if ack_message_sender_id == myself:
+					# Procurando a mensagem correspondente na lista de acks pendentes
+					for pending_key in list(pending_messages.keys()):
+						if pending_key[0] == ack_timestamp: # se é a mensagem que está sendo confirmada
+							if ack_sender in pending_messages[pending_key]['peers_pending_ack']: # se estava pendente mesmo
+								pending_messages[pending_key]['peers_pending_ack'].remove(ack_sender)
+							
+							if not pending_messages[pending_key]['peers_pending_ack']: # se não há mais peers pendentes
+								del pending_messages[pending_key]
+								print(f"All acks received for message {pending_key[1]}")
+							break
+
 				# Tentando entregar as mensagens da fila
 				while message_queue:
 					(top_key, top_message) = message_queue[0]
@@ -223,6 +269,7 @@ class MessageHandler(threading.Thread):
 					ack_pack = pickle.dumps(ack)
 					for peer in PEERS:
 						self.send_sock.sendto(ack_pack, (peer, PEER_UDP_PORT))
+						print(f"Sent ACK to {peer} for message {message_number} from {sender_id} with timestamp {received_timestamp}")
 
 					# Já que recebemos uma nova mensagem, verificamos se há mensagens na fila para serem entregues
 					# Tentando entregar as mensagens da fila
@@ -303,6 +350,11 @@ if __name__ == '__main__':
 		msgHandler.start()
 		print('Handler started')
 
+		# Thread de reenvio de mensagens
+		resend_thread = threading.Thread(target=resend_messages_thread)
+		resend_thread.start()
+		print('Resend thread started')
+
 		# Recebendo a lista de peers
 		PEERS = get_list_of_peers()
 
@@ -364,9 +416,20 @@ if __name__ == '__main__':
 			# Incrementando o relógio de Lamport
 			lamport_clock += 1
 					
-			# Enviando a mensagem para todos os peers
+			# Criando a mensagem
 			msg = (myself, message_number, lamport_clock)
 			message_pack = pickle.dumps(msg)
+
+			# Registrando a mensagem como pendente de ack para todos os peers
+			key = (lamport_clock, message_number)
+			pending_messages[key] = {
+				'message_data': msg,
+				'message_pack': message_pack,
+				'peers_pending_ack': set(PEERS.copy()),
+				'sent_time': time.time(),
+			}
+
+			# Enviando a mensagem para todos os peers
 			for adress_to_send in PEERS:
 				send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
 				print(f'Sent message {message_number} with timestamp {lamport_clock}')
