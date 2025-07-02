@@ -35,6 +35,10 @@ pending_messages = {}
 # Valor: (message_data, peers_pending_ack), a mensagem (para reenvio posterior caso necessário) e a lista de peers que ainda não enviaram o ack
 message_timeout = 5.0 # tempo máximo de espera para o ack de uma mensagem
 
+# Mapeamento entre IDs dos peers e seus IPs
+peer_id_to_ip = {}  # {0: '52.10.54.6', 1: '52.12.78.132', 2: '54.92.143.133'}
+ip_to_peer_id = {}  # {'52.10.54.6': 0, '52.12.78.132': 1, '54.92.143.133': 2}
+
 # Armazena a lista de peers
 PEERS = []
 
@@ -183,6 +187,10 @@ class MessageHandler(threading.Thread):
 				handshake_count = handshake_count + 1
 				print('--- Handshake received: ', msg[1])
 
+				# Construindo o mapeamento entre IDs dos peers e seus IPs
+				peer_id_to_ip[msg[1]] = sender_address[0]
+				ip_to_peer_id[sender_address[0]] = msg[1]
+
 				# Enviando confirmação de handshake
 				print(f"Sending handshake confirmation to {sender_address} with socket {PEER_UDP_PORT}")
 				ack_message = ('HANDSHAKE_ACK', myself)
@@ -224,6 +232,8 @@ class MessageHandler(threading.Thread):
 
 				# Removendo o peer da lista de pendentes se for uma mensagem deste peer
 				if ack_message_sender_id == myself:
+					ack_sender_id = ip_to_peer_id[ack_sender]
+
 					messages_to_remove = []
 
 					# Procurando a mensagem correspondente na lista de acks pendentes
