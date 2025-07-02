@@ -4,6 +4,7 @@ import threading
 import random
 import time
 import pickle
+import os
 import heapq
 from requests import get
 
@@ -110,8 +111,14 @@ def wait_all_my_message_acks_received(number_of_messages, myself):
 			print("All messages received")
 			return
 		
-		print(f"Still waiting for acks of messages.... Pending messages:\n{pending_messages}")
-		
+		print(f"Still waiting for acks of messages.... Pending messages:")
+		for key, message_info in pending_messages.items():
+			print(f"Message {key[1]} from {key[0]}")
+			print(f"\tAcks received: {message_info['peers_pending_ack']}")
+			print(f"\tMessage: {message_info['message_pack']}")
+			print(f"\tSent time: {message_info['sent_time']}")
+			print(f"\tPeers pending ack: {message_info['peers_pending_ack']}")
+			print(f"\tMessage pack: {message_info['message_pack']}")
 		time.sleep(1)
 
 def flush_queue_until_empty():
@@ -406,6 +413,7 @@ if __name__ == '__main__':
 		# Aguardando o sinal de início do servidor de comparação
 		print('Waiting for signal to start...')
 		(myself, number_of_messages) = wait_to_start()
+		os.system('clear')
 		print('I am up, and my ID is: ', str(myself))
 
 		# Resetando as variáveis globais para uma próxima rodada de envio de mensagens
