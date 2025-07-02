@@ -452,6 +452,13 @@ if __name__ == '__main__':
 				send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
 				print(f'Sent message {message_number} with timestamp {lamport_clock}')
 
+			# Adicionando a própria mensagem à fila para ordenação total
+			heapq.heappush(message_queue, ((lamport_clock, myself), msg))
+			key = (lamport_clock, myself)
+			if key not in acks_received:
+				acks_received[key] = set()
+			acks_received[key].add(myself) # Nós mesmos "confirmamos" a nossa própria mensagem
+
 		# Aguarda todos os ACKs das mensagens deste peer
 		wait_all_my_message_acks_received(number_of_messages, myself)
 
