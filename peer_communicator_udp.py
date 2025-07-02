@@ -46,6 +46,12 @@ stop_threads_flag = False
 # Armazena a lista de peers
 PEERS = []
 
+# Locks para sincronização
+message_queue_lock = threading.Lock()
+acks_lock = threading.Lock()
+pending_messages_lock = threading.Lock()
+lamport_clock_lock = threading.Lock()
+
 # Socket UDP para enviar e receber mensagens
 send_socket = socket(AF_INET, SOCK_DGRAM)
 receive_socket = socket(AF_INET, SOCK_DGRAM)
@@ -115,7 +121,6 @@ def wait_all_my_message_acks_received(number_of_messages, myself):
 		for key, message_info in pending_messages.items():
 			print(f"Message {key[1]} from {key[0]}")
 			print(f"\tAcks received: {message_info['peers_pending_ack']}")
-			print(f"\tMessage: {message_info['message_pack']}")
 			print(f"\tSent time: {message_info['sent_time']}")
 			print(f"\tPeers pending ack: {message_info['peers_pending_ack']}")
 			print(f"\tMessage pack: {message_info['message_pack']}")
@@ -254,10 +259,22 @@ class MessageHandler(threading.Thread):
 
 				print(f"Received ACK from {ack_sender} for message from {ack_message_sender_id} with timestamp {ack_timestamp}")
 
-				# Registrando a confirmação de recebimento da mensagem pelo peer que enviou o ack
-				if key not in acks_received:
-					acks_received[key] = set()
-				acks_received[key].add(ack_sender)
+				with message_queue_lock, acks_lock:
+					# Registrando a confirmação de recebimento da mensagem pelo peer que enviou o ack
+					if key not in acks_received:
+						acks_received[key] = set()
+					acks_received[key].add(ack_sender)
+
+					# Tentando entregar as mensagens da fila
+					while message_queue:
+						(top_key, top_message) = message_queue[0]
+						if len(acks_received.get(top_key, set())) >= N: # se todos os peers receberam a mensagem do topo da fila
+							# Entregando a mensagem
+							heapq.heappop(message_queue)
+							log_list.append(top_message)
+							print(f"Delivered message {top_message[1]} from process {top_message[0]} with timestamp {top_message[2]}")
+						else:
+							break # a próxima mensagem não tem todos os acks ainda
 
 				# Removendo o peer da lista de pendentes se for uma mensagem deste peer
 				if ack_message_sender_id == myself:
@@ -281,17 +298,6 @@ class MessageHandler(threading.Thread):
 					# Removendo as mensagens da lista de pendentes
 					for key_to_remove in messages_to_remove:
 						del pending_messages[key_to_remove]
-
-				# Tentando entregar as mensagens da fila
-				while message_queue:
-					(top_key, top_message) = message_queue[0]
-					if len(acks_received.get(top_key, set())) >= N: # se todos os peers receberam a mensagem do topo da fila
-						# Entregando a mensagem
-						heapq.heappop(message_queue)
-						log_list.append(top_message)
-						print(f"Delivered message {top_message[1]} from process {top_message[0]} with timestamp {top_message[2]}")
-					else:
-						break # a próxima mensagem não tem todos os acks ainda
 			else:
 				if isinstance(msg, tuple) and len(msg) == 3: # garantindo que é uma mensagem normal e não de controle
 					sender_id, message_number, received_timestamp = msg
@@ -300,17 +306,30 @@ class MessageHandler(threading.Thread):
 
 					# Incrementando o relógio de Lamport com base na mensagem recebida
 					global lamport_clock
-					lamport_clock = max(lamport_clock, received_timestamp) + 1
+					with message_queue_lock, acks_lock, lamport_clock_lock:
+						lamport_clock = max(lamport_clock, received_timestamp) + 1
 
-					# Enfileirando a mensagem recebida
-					heapq.heappush(message_queue, ((received_timestamp, sender_id), msg))
+						# Enfileirando a mensagem recebida
+						heapq.heappush(message_queue, ((received_timestamp, sender_id), msg))
 
-					# Inicializando o controle de acks para esta mensagem recebida ou reaproveitando de um já existente
-					key = (received_timestamp, sender_id)
-					if key not in acks_received:
-						acks_received[key] = set()
-					acks_received[key].add(myself)
-					acks_received[key].add(sender_id) # o próprio peer que enviou a mensagem também confirma a mensagem recebida
+						# Marcando ACKs de recebimento da mensagem
+						key = (received_timestamp, sender_id)
+						if key not in acks_received:
+							acks_received[key] = set()
+						acks_received[key].add(myself)
+						acks_received[key].add(sender_id) # o próprio peer que enviou a mensagem também confirma a mensagem recebida
+
+						# Já que recebemos uma nova mensagem, verificamos se há mensagens na fila para serem entregues
+						# Tentando entregar as mensagens da fila
+						while message_queue:
+							(top_key, top_message) = message_queue[0]
+							if len(acks_received.get(top_key, set())) >= N: # se todos os peers receberam a mensagem do topo da fila
+								# Entregando a mensagem
+								heapq.heappop(message_queue)
+								log_list.append(top_message)
+								print(f"Delivered message {top_message[1]} from process {top_message[0]} with timestamp {top_message[2]}")
+							else:
+								break # a próxima mensagem não tem todos os acks ainda
 
 					# Enviando confirmação de recebimento da mensagem para todos os peers
 					ack = ("ACK", myself, received_timestamp, sender_id)
@@ -318,18 +337,6 @@ class MessageHandler(threading.Thread):
 					for peer in PEERS:
 						self.send_sock.sendto(ack_pack, (peer, PEER_UDP_PORT))
 						print(f"Sent ACK to {peer} for message {message_number} from {sender_id} with timestamp {received_timestamp}")
-
-					# Já que recebemos uma nova mensagem, verificamos se há mensagens na fila para serem entregues
-					# Tentando entregar as mensagens da fila
-					while message_queue:
-						(top_key, top_message) = message_queue[0]
-						if len(acks_received.get(top_key, set())) >= N: # se todos os peers receberam a mensagem do topo da fila
-							# Entregando a mensagem
-							heapq.heappop(message_queue)
-							log_list.append(top_message)
-							print(f"Delivered message {top_message[1]} from process {top_message[0]} with timestamp {top_message[2]}")
-						else:
-							break # a próxima mensagem não tem todos os acks ainda
 
 		# Salvando a lista de mensagens recebidas por este peer em um arquivo de log
 		logfile = open('logfile' + str(myself) + '.log', 'w')
@@ -501,32 +508,36 @@ if __name__ == '__main__':
 			time.sleep(random.randrange(10, 100) / 1000)
 
 			# Incrementando o relógio de Lamport
-			lamport_clock += 1
+			with lamport_clock_lock, message_queue_lock, acks_lock:
+				lamport_clock += 1
+				current_lamport_clock = lamport_clock
 					
-			# Criando a mensagem
-			msg = (myself, message_number, lamport_clock)
-			message_pack = pickle.dumps(msg)
+				# Criando a mensagem
+				msg = (myself, message_number, current_lamport_clock)
+				message_pack = pickle.dumps(msg)
 
+				# Adicionando a própria mensagem à fila para ordenação total
+				heapq.heappush(message_queue, ((current_lamport_clock, myself), msg))
+
+				key = (current_lamport_clock, myself)
+				if key not in acks_received:
+					acks_received[key] = set()
+				acks_received[key].add(myself) # Nós mesmos "confirmamos" a nossa própria mensagem
+	
 			# Registrando a mensagem como pendente de ack para todos os peers
-			key = (lamport_clock, message_number)
-			pending_messages[key] = {
-				'message_data': msg,
-				'message_pack': message_pack,
-				'peers_pending_ack': set(PEERS.copy()),
-				'sent_time': time.time(),
-			}
+			with pending_messages_lock:
+				key = (current_lamport_clock, message_number)
+				pending_messages[key] = {
+					'message_data': msg,
+					'message_pack': message_pack,
+					'peers_pending_ack': set(PEERS.copy()),
+					'sent_time': time.time(),
+				}
 
 			# Enviando a mensagem para todos os peers
 			for adress_to_send in PEERS:
 				send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
 				print(f'Sent message {message_number} with timestamp {lamport_clock}')
-
-			# Adicionando a própria mensagem à fila para ordenação total
-			heapq.heappush(message_queue, ((lamport_clock, myself), msg))
-			key = (lamport_clock, myself)
-			if key not in acks_received:
-				acks_received[key] = set()
-			acks_received[key].add(myself) # Nós mesmos "confirmamos" a nossa própria mensagem
 
 		# Aguarda todos os ACKs das mensagens deste peer
 		wait_all_my_message_acks_received(number_of_messages, myself)
