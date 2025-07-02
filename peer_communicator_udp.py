@@ -162,6 +162,7 @@ def resend_messages_thread():
 			message_info['sent_time'] = current_time
 
 		time.sleep(1)
+	stop_threads_flag = False
 
 class MessageHandler(threading.Thread):
 	"""
@@ -379,7 +380,6 @@ def reset_global_variables():
 	print("Stopping all threads...")
 	stop_all_threads()
 
-	global stop_threads_flag
 	global lamport_clock, message_queue, acks_received, pending_messages
 	global peer_id_to_ip, ip_to_peer_id, handshake_count, log_list
 
@@ -393,7 +393,6 @@ def reset_global_variables():
 	ip_to_peer_id = {}
 	handshake_count = 0
 	log_list = []
-	stop_threads_flag = False
 
 	# Resetar o evento de handshake
 	handshake_complete_event.clear()
