@@ -242,8 +242,8 @@ class MessageHandler(threading.Thread):
 
 						if pending_timestamp == ack_timestamp: # se é a mensagem que está sendo confirmada
 							if ack_sender_ip in pending_info['peers_pending_ack']: # se estava pendente mesmo
-								pending_info['peers_pending_ack'].remove(ack_sender)
-								print(f"Removed the peer {ack_sender} from pending messages for message {pending_message_number}")
+								pending_info['peers_pending_ack'].remove(ack_sender_ip)
+								print(f"Removed the peer {ack_sender} ({ack_sender_ip}) from pending messages for message {pending_message_number}")
 							
 							if not pending_info['peers_pending_ack']: # se não há mais peers pendentes, removendo a mensagem da lista de pendentes
 								messages_to_remove.append(pending_key)	
