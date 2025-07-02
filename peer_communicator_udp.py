@@ -39,6 +39,9 @@ message_timeout = 5.0 # tempo máximo de espera para o ack de uma mensagem
 peer_id_to_ip = {}  # {0: '52.10.54.6', 1: '52.12.78.132', 2: '54.92.143.133'}
 ip_to_peer_id = {}  # {'52.10.54.6': 0, '52.12.78.132': 1, '54.92.143.133': 2}
 
+# Flag para indicar que todas as threads devem parar
+stop_threads_flag = False
+
 # Armazena a lista de peers
 PEERS = []
 
@@ -134,7 +137,9 @@ def resend_messages_thread():
 	"""
 	Verifica se há mensagens pendentes de ack e as reenvia caso necessário.
 	"""
-	while True:
+	global stop_threads_flag
+
+	while not stop_threads_flag:
 		current_time = time.time()
 		messages_to_resend = []
 
@@ -156,6 +161,7 @@ def resend_messages_thread():
 			message_info['sent_time'] = current_time
 
 		time.sleep(1)
+	stop_all_threads = False
 
 class MessageHandler(threading.Thread):
 	"""
@@ -355,11 +361,24 @@ def wait_to_start():
 
     return (myself, number_of_messages)
 
+def stop_all_threads():
+    """
+    Para todas as threads antes de resetar variáveis.
+    """
+    # Sinalizar para threads pararem
+    global stop_threads_flag
+    stop_threads_flag = True
+    
+    # Aguardar um tempo para threads terminarem
+    time.sleep(2)
 
 def reset_global_variables():
 	"""
 	Reseta as variáveis globais para uma próxima rodada de envio de mensagens.
 	"""
+	print("Stopping all threads...")
+	stop_all_threads()
+
 	global lamport_clock, message_queue, acks_received, pending_messages
 	global peer_id_to_ip, ip_to_peer_id, handshake_count, log_list
 
@@ -508,3 +527,11 @@ if __name__ == '__main__':
 			msg = (-1, -1, lamport_clock)
 			message_pack = pickle.dumps(msg)
 			send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
+
+		print("Waiting for MessageHandler to finish...")
+		msgHandler.join(timeout=10)  # Aguarda até 10 segundos
+
+		if msgHandler.is_alive():
+			print("WARNING: MessageHandler still running!")
+
+		print("MessageHandler finished. Ready for next iteration.")
