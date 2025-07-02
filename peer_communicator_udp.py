@@ -224,16 +224,24 @@ class MessageHandler(threading.Thread):
 
 				# Removendo o peer da lista de pendentes se for uma mensagem deste peer
 				if ack_message_sender_id == myself:
+					messages_to_remove = []
+
 					# Procurando a mensagem correspondente na lista de acks pendentes
-					for pending_key in list(pending_messages.keys()):
-						if pending_key[0] == ack_timestamp: # se é a mensagem que está sendo confirmada
-							if ack_sender in pending_messages[pending_key]['peers_pending_ack']: # se estava pendente mesmo
-								pending_messages[pending_key]['peers_pending_ack'].remove(ack_sender)
+					for pending_key, pending_info in pending_messages.items():
+						pending_timestamp, pending_message_number = pending_key
+
+						if pending_timestamp == ack_timestamp: # se é a mensagem que está sendo confirmada
+							if ack_sender in pending_info['peers_pending_ack']: # se estava pendente mesmo
+								pending_info['peers_pending_ack'].remove(ack_sender)
+								print(f"Removed the peer {ack_sender} from pending messages for message {pending_message_number}")
 							
-							if not pending_messages[pending_key]['peers_pending_ack']: # se não há mais peers pendentes
-								del pending_messages[pending_key]
+							if not pending_info['peers_pending_ack']: # se não há mais peers pendentes, removendo a mensagem da lista de pendentes
+								messages_to_remove.append(pending_key)	
 								print(f"All acks received for message {pending_key[1]}")
-							break
+
+					# Removendo as mensagens da lista de pendentes
+					for key_to_remove in messages_to_remove:
+						del pending_messages[key_to_remove]
 
 				# Tentando entregar as mensagens da fila
 				while message_queue:
