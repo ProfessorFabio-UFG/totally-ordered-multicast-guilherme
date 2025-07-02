@@ -381,15 +381,15 @@ def reset_global_variables():
 if __name__ == '__main__':
     # Registrando o peer com o gerente de grupo
 	register_with_group_manager()
-      
+    
 	while True:
-		# Resetando as variáveis globais para uma próxima rodada de envio de mensagens
-		reset_global_variables()
-
 		# Aguardando o sinal de início do servidor de comparação
 		print('Waiting for signal to start...')
 		(myself, number_of_messages) = wait_to_start()
 		print('I am up, and my ID is: ', str(myself))
+
+		# Resetando as variáveis globais para uma próxima rodada de envio de mensagens
+		reset_global_variables()
 
 		# Se o número de mensagens for 0, encerra o programa
 		if number_of_messages == 0:
