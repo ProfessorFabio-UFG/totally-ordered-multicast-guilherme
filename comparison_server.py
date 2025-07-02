@@ -83,7 +83,7 @@ def wait_for_logs_and_compare(N_MSGS):
 		messages.append(pickle.loads(msgPack))
 		number_of_peers = number_of_peers + 1
 
-	unordered = False
+	unordered = 0
 
 	print("Messages:")
 	for message in messages:
