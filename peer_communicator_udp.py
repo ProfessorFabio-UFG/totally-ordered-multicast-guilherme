@@ -281,6 +281,7 @@ class MessageHandler(threading.Thread):
 					if key not in acks_received:
 						acks_received[key] = set()
 					acks_received[key].add(myself)
+					acks_received[key].add(sender_id) # o próprio peer que enviou a mensagem também confirma a mensagem recebida
 
 					# Enviando confirmação de recebimento da mensagem para todos os peers
 					ack = ("ACK", myself, received_timestamp, sender_id)
