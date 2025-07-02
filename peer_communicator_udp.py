@@ -379,6 +379,7 @@ def reset_global_variables():
 	print("Stopping all threads...")
 	stop_all_threads()
 
+	global stop_threads_flag
 	global lamport_clock, message_queue, acks_received, pending_messages
 	global peer_id_to_ip, ip_to_peer_id, handshake_count, log_list
 
