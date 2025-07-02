@@ -98,7 +98,7 @@ def wait_for_logs_and_compare(N_MSGS):
 				unordered = unordered + 1
 				break
 	
-	print ('Found ' + str(unordered) + ' unordered message rounds')
+	print (f'Found {unordered} unordered message rounds')
 
 if __name__ == "__main__":
 	main_loop()

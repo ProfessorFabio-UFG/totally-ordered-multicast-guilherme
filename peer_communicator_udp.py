@@ -123,7 +123,7 @@ def flush_queue_until_empty():
 
 	while message_queue:
 		top_key, top_message = message_queue[0]
-		if len(acks_received.get(top_key, set())) >= len(PEERS):
+		if len(acks_received.get(top_key, set())) >= N:
 			heapq.heappop(message_queue)
 			log_list.append(top_message)
 			print(f"Delivered (late) {top_message}")
@@ -271,7 +271,7 @@ class MessageHandler(threading.Thread):
 				# Tentando entregar as mensagens da fila
 				while message_queue:
 					(top_key, top_message) = message_queue[0]
-					if len(acks_received.get(top_key, set())) >= len(PEERS): # se todos os peers receberam a mensagem do topo da fila
+					if len(acks_received.get(top_key, set())) >= N: # se todos os peers receberam a mensagem do topo da fila
 						# Entregando a mensagem
 						heapq.heappop(message_queue)
 						log_list.append(top_message)
@@ -309,7 +309,7 @@ class MessageHandler(threading.Thread):
 					# Tentando entregar as mensagens da fila
 					while message_queue:
 						(top_key, top_message) = message_queue[0]
-						if len(acks_received.get(top_key, set())) >= len(PEERS): # se todos os peers receberam a mensagem do topo da fila
+						if len(acks_received.get(top_key, set())) >= N: # se todos os peers receberam a mensagem do topo da fila
 							# Entregando a mensagem
 							heapq.heappop(message_queue)
 							log_list.append(top_message)
@@ -383,6 +383,9 @@ if __name__ == '__main__':
 	register_with_group_manager()
       
 	while True:
+		# Resetando as variáveis globais para uma próxima rodada de envio de mensagens
+		reset_global_variables()
+
 		# Aguardando o sinal de início do servidor de comparação
 		print('Waiting for signal to start...')
 		(myself, number_of_messages) = wait_to_start()
