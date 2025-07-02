@@ -356,6 +356,28 @@ def wait_to_start():
     return (myself, number_of_messages)
 
 
+def reset_global_variables():
+	"""
+	Reseta as variáveis globais para uma próxima rodada de envio de mensagens.
+	"""
+	global lamport_clock, message_queue, acks_received, pending_messages
+	global peer_id_to_ip, ip_to_peer_id, handshake_count, log_list
+
+	print("Resetting global state for new execution...")
+
+	lamport_clock = 0
+	message_queue = []
+	acks_received = {}
+	pending_messages = {}
+	peer_id_to_ip = {}
+	ip_to_peer_id = {}
+	handshake_count = 0
+	log_list = []
+
+	# Resetar o evento de handshake
+	handshake_complete_event.clear()
+
+
 if __name__ == '__main__':
     # Registrando o peer com o gerente de grupo
 	register_with_group_manager()

@@ -88,6 +88,7 @@ def wait_for_logs_and_compare(N_MSGS):
 	print("Messages:")
 	for message in messages:
 		print(message)
+		print()
 
 	# Verificando se as mensagens estão ordenadas
 	for j in range(0, N_MSGS-1):
