@@ -201,6 +201,7 @@ def send_handshakes_with_confirmation(PEERS, max_retries=5, timeout_per_retry=2.
 		
 		if not peers_to_send:
 			print("All handshakes confirmed!")
+			handshake_ack_complete_event.set()
 			return True
 		
 		print(f"\nRetry {retry + 1}/{max_retries}: Sending handshakes to {len(peers_to_send)} peers")
