@@ -15,6 +15,7 @@ handshake_count = 0
 
 # Evento para indicar que todos os handshakes foram recebidos
 handshake_complete_event = threading.Event()
+handshake_ack_complete_event = threading.Event()
 
 # Relógio de Lamport
 lamport_clock = 0
@@ -46,11 +47,17 @@ stop_threads_flag = False
 # Armazena a lista de peers
 PEERS = []
 
+# Dicionário para armazenar as confirmações de handshake recebidas de cada peer
+# Chave: IP do peer, quem mandou o handshake e quando ele foi enviado
+# Valor: True se o handshake foi confirmado, False caso contrário
+handshake_confirmations = {}
+
 # Locks para sincronização
 message_queue_lock = threading.Lock()
 acks_lock = threading.Lock()
 pending_messages_lock = threading.Lock()
 lamport_clock_lock = threading.Lock()
+handshake_confirmations_lock = threading.Lock()
 
 # Socket UDP para enviar e receber mensagens
 send_socket = socket(AF_INET, SOCK_DGRAM)
@@ -176,6 +183,54 @@ def resend_messages_thread():
 		time.sleep(1)
 	stop_threads_flag = False
 
+def send_handshakes_with_confirmation(PEERS, max_retries=5, timeout_per_retry=2.0):
+	"""
+	Envia handshakes para todos os peers e aguarda confirmações de handshake.
+	"""
+	global handshake_confirmations
+
+	# Inicializar tracking de confirmações
+	with handshake_confirmations_lock:
+		handshake_confirmations = {peer: False for peer in PEERS}
+
+	for retry in range(max_retries):
+		# Identificar peers que ainda não confirmaram
+		peers_to_send = []
+		with handshake_confirmations_lock:
+			peers_to_send = [peer for peer, confirmed in handshake_confirmations.items() if not confirmed]
+		
+		if not peers_to_send:
+			print("All handshakes confirmed!")
+			return True
+		
+		print(f"\nRetry {retry + 1}/{max_retries}: Sending handshakes to {len(peers_to_send)} peers")
+		
+		# Enviar handshakes para peers não confirmados
+		for peer_addr in peers_to_send:
+			print(f'Sending handshake to {peer_addr}')
+			msg = ('READY', myself)
+			message_pack = pickle.dumps(msg)
+			send_socket.sendto(message_pack, (peer_addr, PEER_UDP_PORT))
+		
+		# Aguardar confirmações por um tempo
+		time.sleep(timeout_per_retry)
+
+		# Verificar status
+		with handshake_confirmations_lock:
+			confirmed_count = sum(1 for confirmed in handshake_confirmations.values() if confirmed)
+			print(f"Confirmed: {confirmed_count}/{len(PEERS)}")
+
+	# Verificar resultado final
+	with handshake_confirmations_lock:
+		missing = [peer for peer, confirmed in handshake_confirmations.items() if not confirmed]
+		if missing:
+			print(f"WARNING: Failed to get handshake confirmation from: {missing}")
+			return False
+
+	handshake_ack_complete_event.set()
+
+	return True
+
 class MessageHandler(threading.Thread):
 	"""
 	Handler de recebimento de handshakes e mensagens.
@@ -189,6 +244,7 @@ class MessageHandler(threading.Thread):
 		print('Handler is ready. Waiting for the handshakes...')
 		global handshake_count
 		global log_list
+		global handshake_confirmations
 
 		# Lista de mensagens recebidas
 		log_list = []
@@ -197,7 +253,6 @@ class MessageHandler(threading.Thread):
 
 		# Recebendo handshakes e enviando confirmações de handshake.
 		# Espera-se até que N handshakes sejam recebidos.
-		# TODO: verificar se o handshake é recebido de todos os peers e não apenas N
 		while handshake_count < N-1:
 			message_pack, sender_address = self.sock.recvfrom(1024)
 			msg = pickle.loads(message_pack)
@@ -227,7 +282,7 @@ class MessageHandler(threading.Thread):
 		# todos eles mandem uma mensagem de parada (-1, -1)
 		stop_count = 0
 		while True:
-			message_pack = self.sock.recv(1024)  # receive data from client
+			message_pack, sender_address = self.sock.recvfrom(1024)  # receive data from client
 			msg = pickle.loads(message_pack)
 			
 			# Se for uma mensagem de parada, isto é, o peer não tem mais mensagens para enviar,
@@ -253,6 +308,20 @@ class MessageHandler(threading.Thread):
 					###
 
 					break  # parando quando todos os peers sinalizarem encerramento
+			elif msg[0] == 'HANDSHAKE_ACK':
+				# Registrando a confirmação de handshake
+				with handshake_confirmations_lock:
+					handshake_confirmations[sender_address[0]] = True
+					print(f"Received handshake confirmation from {msg[1]}")
+			elif msg[0] == "READY":
+				# Recebendo handshake e enviando confirmação de handshake
+				# handshake_count = handshake_count + 1 # não é necessário continuar contando os handshakes
+				print(f"Received handshake from {msg[1]}")
+				# Enviando confirmação de handshake
+				print(f"Sending handshake confirmation to {msg[1]} with socket {PEER_UDP_PORT}")
+				ack_message = ('HANDSHAKE_ACK', myself)
+				ack_message_pack = pickle.dumps(ack_message)
+				self.send_sock.sendto(ack_message_pack, (sender_address[0], PEER_UDP_PORT))
 			elif isinstance(msg, tuple) and msg[0] == "ACK": # recebendo confirmação de recebimento de mensagem
 				_, ack_sender, ack_timestamp, ack_message_sender_id = msg
 				key = (ack_timestamp, ack_message_sender_id)
@@ -396,6 +465,7 @@ def reset_global_variables():
 
 	global lamport_clock, message_queue, acks_received, pending_messages
 	global peer_id_to_ip, ip_to_peer_id, handshake_count, log_list
+	global handshake_confirmations
 
 	print("Resetting global state for new execution...")
 
@@ -407,6 +477,7 @@ def reset_global_variables():
 	ip_to_peer_id = {}
 	handshake_count = 0
 	log_list = []
+	handshake_confirmations = {}
 
 	# Resetar o evento de handshake
 	handshake_complete_event.clear()
@@ -436,7 +507,7 @@ if __name__ == '__main__':
 		#	Wait for other processes to be ready
 		#	TODO: fix bug that causes a failure when not all processes are started within this time
 		#	(fully started processes start sending data messages, which the others try to interpret as control messages)
-		time.sleep(5)
+		# time.sleep(5)
 
 		# Criando o handler de recebimento de handshakes e mensagens,
 		# que é iniciado em uma thread separada para não bloquear a execução do programa
@@ -452,10 +523,16 @@ if __name__ == '__main__':
 		# Recebendo a lista de peers
 		PEERS = get_list_of_peers()
 
-		# # Dicionário para armazenar as confirmações de handshake recebidas de cada peer
-		# handshake_confirmations = {peer: False for peer in PEERS}
+		print("Iniciando handshake com a espera de confirmações")
+		handshake_success = send_handshakes_with_confirmation(PEERS)
+		if not handshake_success:
+			print("Handshake com confirmações de handshake falhou. Saindo do programa.")
+			exit(1)
 
-		# # Enviando handshakes para todos os peers e esperando as confirmações de cada um
+		handshake_ack_complete_event.wait() # esperando a confirmação de handshake de todos os peers
+		handshake_complete_event.wait() # esperando o handshake de todos os peers
+
+		# Enviando handshakes para todos os peers e esperando as confirmações de cada um
 		# for adress_to_send in PEERS:
 		# 	print('Sending handshake to ', adress_to_send)
 		# 	msg = ('READY', myself)
@@ -484,13 +561,13 @@ if __name__ == '__main__':
 		# 		print('Timeout waiting for handshake confirmation from ', adress_to_send)
 		# 		break
 
-		print('Main Thread: Sending handshakes to all peers...')
-		# Enviando handshakes para todos os peers
-		for address_to_send in PEERS:
-			print('Sending handshake to ', address_to_send)
-			msg = ('READY', myself)
-			message_pack = pickle.dumps(msg)
-			send_socket.sendto(message_pack, (address_to_send, PEER_UDP_PORT))
+		# print('Main Thread: Sending handshakes to all peers...')
+		# # Enviando handshakes para todos os peers
+		# for address_to_send in PEERS:
+		# 	print('Sending handshake to ', address_to_send)
+		# 	msg = ('READY', myself)
+		# 	message_pack = pickle.dumps(msg)
+		# 	send_socket.sendto(message_pack, (address_to_send, PEER_UDP_PORT))
 
 		print('Main Thread: Sent all handshakes. Waiting for handshake completion...')
 
@@ -498,7 +575,7 @@ if __name__ == '__main__':
 		# Eles são recebidos na thread do MessageHandler.
 		# while handshake_count < N:
 		# 	pass  # TODO: find a better way to wait for the handshakes
-		handshake_complete_event.wait()
+		
                 
 		print('Main Thread: Sent all handshakes. handshake_count=', str(handshake_count))
 
