@@ -80,3 +80,7 @@ Este script é responsável por:
 	- Cada processo envia (-1, -1) indicando que não tem mais mensagens.
 	- O `MessageHandler` espera receber N-1 encerramentos.
 	- Os logs de mensagens entregues são enviados ao servidor.
+
+## Rascunho do fluxo de execução
+
+![Fluxo de execução](Diagrama.png)
