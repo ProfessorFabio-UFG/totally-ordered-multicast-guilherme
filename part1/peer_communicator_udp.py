@@ -131,7 +131,7 @@ def wait_all_my_message_acks_received(number_of_messages, myself):
 			print(f"\tSent time: {message_info['sent_time']}")
 			print(f"\tPeers pending ack: {message_info['peers_pending_ack']}")
 			print(f"\tMessage pack: {message_info['message_pack']}")
-		time.sleep(1)
+		time.sleep(5)
 
 def flush_queue_until_empty():
 	"""
@@ -164,7 +164,7 @@ def resend_messages_thread():
 		messages_to_resend = []
 
 		# Verificando mensagens que passaram do tempo de espera para o ack
-		for key, message_info in pending_messages.items():
+		for key, message_info in list(pending_messages.items()):
 			if current_time - message_info['sent_time'] > message_timeout:
 				messages_to_resend.append((key, message_info))
 
@@ -574,7 +574,7 @@ if __name__ == '__main__':
 				print(f'Sent message {message_number} with timestamp {lamport_clock}')
 
 		# Aguarda todos os ACKs das mensagens deste peer
-		# wait_all_my_message_acks_received(number_of_messages, myself)
+		wait_all_my_message_acks_received(number_of_messages, myself)
 
 		# Sinalizando para todos os peers que ele não tem mais mensagens para enviar
 		for adress_to_send in PEERS:
