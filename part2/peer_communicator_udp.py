@@ -280,6 +280,8 @@ class MessageHandler(threading.Thread):
 
 		print('Secondary Thread: Received all handshakes. Entering the loop to receive messages.')
 
+		global lamport_clock
+
 		# Recebendo as mensagens dos outros peers até que
 		# todos eles mandem uma mensagem de parada (-1, -1)
 		stop_count = 0
@@ -368,7 +370,6 @@ class MessageHandler(threading.Thread):
 					print(f"Received message {message_number} from process {sender_id} with timestamp {received_timestamp}")
 
 					# Incrementando o relógio de Lamport com base na mensagem recebida
-					global lamport_clock
 					with message_queue_lock, acks_lock, lamport_clock_lock:
 						lamport_clock = max(lamport_clock, received_timestamp) + 1
 
