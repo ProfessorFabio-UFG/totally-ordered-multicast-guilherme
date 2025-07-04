@@ -426,7 +426,8 @@ class MessageHandler(threading.Thread):
 
 						message_pack = pickle.dumps(msg)
 
-						heapq.heappush(message_queue, ((lamport_clock, myself), msg))
+						if msg[0] != -2:
+							heapq.heappush(message_queue, ((lamport_clock, myself), msg))
 
 						key = (lamport_clock, myself)
 						if key not in acks_received:
