@@ -435,7 +435,11 @@ class MessageHandler(threading.Thread):
 
 						# Registrando a mensagem como pendente de ack para todos os peers
 						with pending_messages_lock:
-							key = (lamport_clock, message_number)
+							if msg[0] == -2:
+								key = (lamport_clock, -2)
+							else:
+								key = (lamport_clock, message_number)
+
 							pending_messages[key] = {
 								'message_data': msg,
 								'message_pack': message_pack,
