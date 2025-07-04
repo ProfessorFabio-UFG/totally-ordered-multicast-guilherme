@@ -127,7 +127,7 @@ def wait_all_my_message_acks_received(number_of_messages, myself):
 		
 		print(f"Still waiting for acks of messages.... Pending messages:")
 		for key, message_info in pending_messages.items():
-			print(f"Message {key[1]} from timestamp{key[0]}")
+			print(f"Message {key[1]} from timestamp {key[0]}")
 			print(f"\tSent time: {message_info['sent_time']}")
 			print(f"\tPeers pending ack: {message_info['peers_pending_ack']}")
 		time.sleep(5)
@@ -293,19 +293,19 @@ class MessageHandler(threading.Thread):
 				received_timestamp = msg[2]
 				sender_id = msg[1]
 
-				# Sinalização de que o sistema pode parar quando possível
-				for adress_to_send in PEERS:
-					msg = (-1, -1, lamport_clock)
-					message_pack = pickle.dumps(msg)
-					send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
-					print(f"Sent message {-1} with timestamp {lamport_clock} to {adress_to_send}")
-
 				# Enviando ACK de recebimento da mensagem de parada
 				ack = ("ACK", myself, received_timestamp, sender_id)
 				ack_pack = pickle.dumps(ack)
 				for adress_to_send in PEERS:
 					send_socket.sendto(ack_pack, (adress_to_send, PEER_UDP_PORT))
 					print(f"Sent ACK to {adress_to_send} for message {-2} with timestamp {received_timestamp}")
+
+				# Sinalização de que o sistema pode parar quando possível
+				for adress_to_send in PEERS:
+					msg = (-1, -1, lamport_clock)
+					message_pack = pickle.dumps(msg)
+					send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
+					print(f"Sent message {-1} with timestamp {lamport_clock} to {adress_to_send}")
 
 			elif msg[0] == -1:
 				stop_count = stop_count + 1
