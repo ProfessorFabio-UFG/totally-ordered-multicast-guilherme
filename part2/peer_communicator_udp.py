@@ -293,7 +293,7 @@ class MessageHandler(threading.Thread):
 				# A mensagem de parada só é enviada por um peer, que é o último
 				# Então uma mensagem basta para parar
 				break
-			
+
 				# stop_count = stop_count + 1
 				# if stop_count == N-1:
 				# 	# flush_queue_until_empty() # entrega todas as mensagens restantes na fila
@@ -450,6 +450,9 @@ class MessageHandler(threading.Thread):
 						for adress_to_send in PEERS:
 							send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
 							print(f'Sent message {msg} with timestamp {lamport_clock} to {adress_to_send}')
+
+						if msg[0] == -1: # se for uma mensagem de parada, sinaliza para o peer que não tem mais mensagens para enviar
+							break
 
 		# Salvando a lista de mensagens recebidas por este peer em um arquivo de log
 		logfile = open('logfile' + str(myself) + '.log', 'w')
