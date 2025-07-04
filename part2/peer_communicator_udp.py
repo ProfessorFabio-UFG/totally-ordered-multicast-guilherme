@@ -415,7 +415,7 @@ class MessageHandler(threading.Thread):
 					if int(message_number[-1]) == myself:
 						# Se chegamos ao limite de mensagens, sinalizamos que o sistema pode para quando possível (-2)
 						if len(message_number) >= number_of_messages:
-							msg = (-2, -1, lamport_clock)
+							msg = (-2, myself, lamport_clock)
 						else:
 							peer_id_to_send = random.randint(0, N-1)
 							while peer_id_to_send == myself:
