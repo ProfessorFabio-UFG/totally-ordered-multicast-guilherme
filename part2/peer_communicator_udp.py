@@ -289,31 +289,19 @@ class MessageHandler(threading.Thread):
 			
 			# Se for uma mensagem de parada, isto é, o peer não tem mais mensagens para enviar,
 			# incrementa o contador de paradas até N
-			if msg[0] == -1:
-				# A mensagem de parada só é enviada por um peer, que é o último
-				# Então uma mensagem basta para parar
-				break
-
-				# stop_count = stop_count + 1
-				# if stop_count == N-1:
-				# 	# flush_queue_until_empty() # entrega todas as mensagens restantes na fila
-				# 	print("Todos os peers sinalizaram encerramento. Saindo do loop de recebimento de mensagens.")
-					
-				# 	###
-				# 	print("Mensagens que sobraram na fila:")
-				# 	for message in message_queue:
-				# 		print(f"Message in queue: {message}")
-				# 		print(f"\tAcks received: {acks_received.get(message[0], set())}")
-					
-				# 	if message_queue:
-				# 		print("WARNING: Messages left in queue - algorithm may have bugs!")
-				# 	else:
-				# 		print("SUCCESS: All messages delivered before termination")
-					
-				# 	print("Todos os peers sinalizaram encerramento. Saindo do loop de recebimento de mensagens.")
-				# 	###
-
-				# 	break  # parando quando todos os peers sinalizarem encerramento
+			if msg[0] == -2:
+				# Sinalização de que o sistema pode parar quando possível
+				for adress_to_send in PEERS:
+					msg = (-1, -1, lamport_clock)
+					message_pack = pickle.dumps(msg)
+					send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
+					print(f"Sent message {-1} with timestamp {lamport_clock} to {adress_to_send}")
+			elif msg[0] == -1:
+				stop_count = stop_count + 1
+				if stop_count >= N-2: # -2 porque o peer que manda -2, não manda -1
+					# flush_queue_until_empty() # entrega todas as mensagens restantes na fila
+					print("Todos os peers sinalizaram encerramento. Saindo do loop de recebimento de mensagens.")
+					break  # parando quando todos os peers sinalizarem encerramento
 			elif msg[0] == 'HANDSHAKE_ACK':
 				# Registrando a confirmação de handshake
 				with handshake_confirmations_lock:
@@ -415,15 +403,14 @@ class MessageHandler(threading.Thread):
 
 					# Se for uma mensagem para este peer, respondemos com uma mensagem para um novo peer aleatório
 					if int(message_number[-1]) == myself:
-						# Se chegamos ao limite de mensagens, sinalizamos para o peer que não tem mais mensagens para enviar
+						# Se chegamos ao limite de mensagens, sinalizamos que o sistema pode para quando possível (-2)
 						if len(message_number) >= number_of_messages:
-							msg = (-1, -1, lamport_clock)
+							msg = (-2, -1, lamport_clock)
 						else:
 							peer_id_to_send = random.randint(0, N-1)
 							while peer_id_to_send == myself:
 								peer_id_to_send = random.randint(0, N-1)
 							message_number = message_number + str(peer_id_to_send)
-							peer_ip_to_send = peer_id_to_ip[peer_id_to_send]
 
 							msg = (myself, message_number, lamport_clock)
 
@@ -451,8 +438,8 @@ class MessageHandler(threading.Thread):
 							send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
 							print(f'Sent message {msg} with timestamp {lamport_clock} to {adress_to_send}')
 
-						if msg[0] == -1: # se for uma mensagem de parada, sinaliza para o peer que não tem mais mensagens para enviar
-							break
+		# Aguarda todos os ACKs das mensagens deste peer
+		wait_all_my_message_acks_received(number_of_messages, myself)
 
 		# Salvando a lista de mensagens recebidas por este peer em um arquivo de log
 		logfile = open('logfile' + str(myself) + '.log', 'w')
@@ -655,9 +642,6 @@ if __name__ == '__main__':
 		# 	for adress_to_send in PEERS:
 		# 		send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
 		# 		print(f'Sent message {message_number} with timestamp {lamport_clock}')
-
-		# Aguarda todos os ACKs das mensagens deste peer
-		wait_all_my_message_acks_received(number_of_messages, myself)
 
 		# Sinalizando para todos os peers que ele não tem mais mensagens para enviar
 		# for adress_to_send in PEERS:
