@@ -309,7 +309,7 @@ class MessageHandler(threading.Thread):
 
 			elif msg[0] == -1:
 				stop_count = stop_count + 1
-				if stop_count >= N-2: # -2 porque o peer que manda -2, não manda -1
+				if stop_count >= N-1:
 					# flush_queue_until_empty() # entrega todas as mensagens restantes na fila
 					print("Todos os peers sinalizaram encerramento. Saindo do loop de recebimento de mensagens.")
 					break  # parando quando todos os peers sinalizarem encerramento
@@ -447,6 +447,14 @@ class MessageHandler(threading.Thread):
 						for adress_to_send in PEERS:
 							send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
 							print(f'Sent message {msg} with timestamp {lamport_clock} to {adress_to_send}')
+
+						# Se for uma mensagem de parada, sinaliza para todos os peers que ele não tem mais mensagens para enviar
+						if msg[0] == -2:
+							for adress_to_send in PEERS:
+								msg = (-1, -1, lamport_clock)
+								message_pack = pickle.dumps(msg)
+								send_socket.sendto(message_pack, (adress_to_send, PEER_UDP_PORT))
+								print(f"Sent message {-1} with timestamp {lamport_clock} to {adress_to_send}")
 
 		# Aguarda todos os ACKs das mensagens deste peer
 		wait_all_my_message_acks_received(number_of_messages, myself)
